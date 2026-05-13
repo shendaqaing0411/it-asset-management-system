@@ -1,5 +1,8 @@
+// 路由配置：Hash 模式、嵌套路由、登录鉴权守卫
+
 import { createRouter, createWebHashHistory } from 'vue-router'
 
+// 所有非登录页面均通过 Layout 组件渲染，作为其子路由
 const routes = [
   {
     path: '/login',
@@ -37,6 +40,7 @@ const routes = [
 
 const router = createRouter({ history: createWebHashHistory(), routes })
 
+// 路由守卫：设置页面标题，校验登录状态（未登录重定向至 /login）
 router.beforeEach((to, from, next) => {
   document.title = to.meta.title ? `${to.meta.title} - IT资产管理系统` : 'IT资产管理系统'
   const token = localStorage.getItem('token')

@@ -28,6 +28,7 @@
 </template>
 
 <script setup>
+// 库存查询：多维筛选（关键字/分类/状态/仓库），行内快捷操作（入库/出库/归还/报废）
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'

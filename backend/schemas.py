@@ -1,3 +1,7 @@
+# Pydantic 数据模型：请求参数校验与响应格式定义
+# 使用 Field 约束确保数据合法性（min_length、ge、gt 等）
+# 所有响应通过 Response 统一封装 code/data/message
+
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import date, datetime

@@ -1,3 +1,6 @@
+# 资产管理路由：资产 CRUD、二维码生成、Excel 导入导出
+# 资产编号自动生成规则：IT-YYYYMM-NNNN（年、月、4位流水号）
+
 import io
 from datetime import datetime
 from fastapi import APIRouter, Depends, Query, UploadFile, File
@@ -12,6 +15,7 @@ router = APIRouter(prefix="/api/assets", tags=["资产管理"])
 
 
 def _format_asset(row):
+    """将数据库行对象格式化为标准字典"""
     return {
         "id": row["id"], "asset_no": row["asset_no"], "name": row["name"],
         "category_id": row["category_id"], "brand": row["brand"], "model": row["model"],
@@ -25,6 +29,7 @@ def _format_asset(row):
 
 
 def _gen_asset_no(db) -> str:
+    """生成资产编号：IT-YYYYMM-NNNN，每月从001开始递增"""
     now = datetime.now()
     ym = now.strftime("%Y%m")
     row = db.execute(
@@ -163,6 +168,7 @@ def delete_asset(asset_id: int, user: dict = Depends(get_current_user)):
 
 @router.get("/qrcode/{asset_id}")
 def get_qrcode(asset_id: int):
+    """为指定资产生成二维码图片（PNG格式），内容为资产编号"""
     db = get_db()
     row = db.execute("SELECT asset_no FROM assets WHERE id = ?", (asset_id,)).fetchone()
     db.close()

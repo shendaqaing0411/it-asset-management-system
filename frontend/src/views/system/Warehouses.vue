@@ -23,6 +23,7 @@
 </template>
 
 <script setup>
+// 仓库管理：名称和位置的 CRUD
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'

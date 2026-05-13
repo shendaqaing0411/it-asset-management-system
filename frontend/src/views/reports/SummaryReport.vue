@@ -13,6 +13,7 @@
 </template>
 
 <script setup>
+// 资产汇总：卡片式展示总数/在库/使用中/维修中/借出/总价值等关键指标
 import { ref, onMounted } from 'vue'
 import api from '../../api'
 const cards = ref([

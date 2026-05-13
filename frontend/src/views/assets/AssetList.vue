@@ -33,6 +33,7 @@
 </template>
 
 <script setup>
+// 资产列表：多条件查询、分页展示、状态标签、二维码弹窗、删除确认
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 

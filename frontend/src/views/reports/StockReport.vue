@@ -22,6 +22,7 @@
 </template>
 
 <script setup>
+// 库存统计：按分类/状态/部门三个维度展示库存分布
 import { ref, onMounted } from 'vue'
 import api from '../../api'
 const data = ref({ by_category: [], by_status: [], by_dept: [] })

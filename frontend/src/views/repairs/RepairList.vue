@@ -35,6 +35,7 @@
 </template>
 
 <script setup>
+// 维修记录：新增/编辑/完成维修，远程搜索关联资产，分页展示
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'

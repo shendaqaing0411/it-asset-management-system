@@ -27,6 +27,7 @@
 </template>
 
 <script setup>
+// 库存预警规则：按仓库+分类设置最低/最高库存阈值
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'

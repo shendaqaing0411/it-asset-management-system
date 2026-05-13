@@ -21,6 +21,7 @@
 </template>
 
 <script setup>
+// 出入库报表：按日期范围和类型筛选，展示明细记录与汇总统计
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 const records = ref([])

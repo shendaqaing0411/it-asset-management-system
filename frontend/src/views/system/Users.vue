@@ -71,6 +71,7 @@
 </template>
 
 <script setup>
+// 用户管理：新增/编辑/删除/重置密码，管理员专属（后端校验角色）
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'

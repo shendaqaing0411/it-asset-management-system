@@ -24,6 +24,7 @@
 </template>
 
 <script setup>
+// 出库管理：只搜索在库资产，支持领用出库和借用出库，选择使用部门
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'

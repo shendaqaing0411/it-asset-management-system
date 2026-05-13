@@ -1,3 +1,6 @@
+# 库存管理路由：出入库、归还、调拨、库存查询、预警监测
+# 出入库同时更新 assets 表状态与 stock_records 表记录
+
 from datetime import date
 from fastapi import APIRouter, Depends, Query
 from database import get_db
@@ -187,6 +190,7 @@ def stock_records(
 
 @router.get("/warnings")
 def get_warnings(user: dict = Depends(get_current_user)):
+    """获取库存预警：对比当前库存与预警阈值，返回低库存/高库存告警"""
     db = get_db()
     rows = db.execute(
         """SELECT w.*, c.name as category_name, wh.name as warehouse_name,

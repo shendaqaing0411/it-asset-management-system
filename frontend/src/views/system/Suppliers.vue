@@ -28,6 +28,7 @@
 </template>
 
 <script setup>
+// 供应商管理：名称/联系人/电话/地址/备注的 CRUD
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'

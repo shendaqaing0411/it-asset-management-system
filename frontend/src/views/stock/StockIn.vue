@@ -25,6 +25,7 @@
 </template>
 
 <script setup>
+// 入库管理：远程搜索资产、选择入库类型和目标仓库、展示最近入库记录
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'

@@ -1,3 +1,5 @@
+# 报表统计路由：资产汇总、库存统计、出入库报表
+
 from fastapi import APIRouter, Depends, Query
 from database import get_db
 from auth import get_current_user
@@ -8,6 +10,7 @@ router = APIRouter(prefix="/api/report", tags=["报表统计"])
 
 @router.get("/summary")
 def summary(user: dict = Depends(get_current_user)):
+    """资产汇总：按状态统计数量与总价值"""
     db = get_db()
     total = db.execute("SELECT COUNT(*) FROM assets").fetchone()[0]
     in_stock = db.execute("SELECT COUNT(*) FROM assets WHERE status = 'in_stock'").fetchone()[0]

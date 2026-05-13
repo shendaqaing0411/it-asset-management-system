@@ -22,6 +22,7 @@
 </template>
 
 <script setup>
+// 部门管理：CRUD 操作，支持排序
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'

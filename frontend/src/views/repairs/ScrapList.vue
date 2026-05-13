@@ -18,6 +18,7 @@
 </template>
 
 <script setup>
+// 报废管理：选择资产确认报废（通过 stock_records 记录 type='报废'），展示报废历史
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'

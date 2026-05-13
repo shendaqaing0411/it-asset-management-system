@@ -55,6 +55,7 @@
 </template>
 
 <script setup>
+// 仪表盘：6 个统计卡片 + ECharts 柱状图（状态分布）+ 环形图（分类占比）+ 最近操作日志 + 库存预警
 import { ref, computed, onMounted } from 'vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -79,6 +80,7 @@ const statusData = ref({ in_stock: 0, in_use: 0, borrowed: 0, repairing: 0, scra
 const categoryData = ref([])
 
 const statusChartOption = computed(() => ({
+  // ECharts 柱状图：按状态统计资产数量
   tooltip: { trigger: 'axis' },
   grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
   xAxis: { type: 'category', data: ['在库', '使用中', '借出', '维修中', '已报废'], axisLine: { lineStyle: { color: '#ddd' } } },
@@ -96,6 +98,7 @@ const statusChartOption = computed(() => ({
 }))
 
 const categoryChartOption = computed(() => ({
+  // ECharts 环形图：按分类统计资产占比
   tooltip: { trigger: 'item' },
   series: [{
     type: 'pie', radius: ['50%', '75%'], center: ['50%', '50%'], itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 3 },

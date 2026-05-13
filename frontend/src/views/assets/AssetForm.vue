@@ -26,6 +26,7 @@
 </template>
 
 <script setup>
+// 资产登记/编辑表单：根据路由参数区分新增和编辑模式，动态加载分类/部门/仓库/供应商选项
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../../api'

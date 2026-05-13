@@ -1,3 +1,7 @@
+# 数据库模块：SQLite 连接管理、建表、初始种子数据
+# 数据库文件存储在 backend/data/it_assets.db
+# 使用 WAL 模式提升并发读写性能，开启外键约束
+
 import sqlite3
 import os
 
@@ -5,17 +9,20 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "it_a
 
 
 def get_db():
+    """获取数据库连接，自动创建目录并配置连接参数"""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA journal_mode=WAL")     # WAL 模式：读写不互斥
+    conn.execute("PRAGMA foreign_keys=ON")       # 启用外键约束
     return conn
 
 
 def init_db():
+    """初始化数据库：建表 + 种子数据（仅首次运行）"""
     conn = get_db()
     cursor = conn.cursor()
+    # 共 9 张业务表
     cursor.executescript('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

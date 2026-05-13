@@ -77,6 +77,8 @@
 </template>
 
 <script setup>
+// 主布局：可折叠侧边栏 + 面包屑导航 + 用户下拉菜单 + 全屏切换
+// 根据路由 name 自动推断面包屑父子标题
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 const route = useRoute()

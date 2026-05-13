@@ -41,6 +41,7 @@
 </template>
 
 <script setup>
+// 登录页面：左侧品牌展示 + 右侧登录表单
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'
@@ -56,6 +57,7 @@ const rules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
+// 登录：调用接口 → 保存 token 和用户信息 → 跳转仪表盘
 async function handleLogin() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return

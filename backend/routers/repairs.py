@@ -1,3 +1,7 @@
+# 维保报废路由：维修记录管理、资产报废
+# 维修完成后自动将资产状态恢复为"在库"
+# 报废通过 stock_records 表 type='报废' 记录
+
 from datetime import date
 from fastapi import APIRouter, Depends, Query
 from database import get_db
@@ -29,6 +33,7 @@ def list_repairs(page: int = Query(1), page_size: int = Query(20), user: dict = 
 
 @router.post("/repairs")
 def create_repair(req: RepairCreate, user: dict = Depends(get_current_user)):
+    """创建维修记录，同时将资产状态更新为"维修中" """
     db = get_db()
     db.execute(
         """INSERT INTO repairs (asset_id, fault_desc, repair_type, repair_cost, repair_date)

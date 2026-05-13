@@ -22,6 +22,7 @@
 </template>
 
 <script setup>
+// 分类管理：资产分类的 CRUD，支持排序
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'

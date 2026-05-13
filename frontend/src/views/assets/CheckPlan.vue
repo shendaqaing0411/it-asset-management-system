@@ -22,6 +22,7 @@
 </template>
 
 <script setup>
+// 资产盘点：按仓库/分类筛选资产，批量标记已盘点状态
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'

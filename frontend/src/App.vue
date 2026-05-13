@@ -1,4 +1,5 @@
 <template>
+  <!-- 根组件：提供 CSS 变量、全局样式、路由过渡动画 -->
   <router-view v-slot="{ Component, route }">
     <transition name="fade" mode="out-in">
       <component :is="Component" :key="route.path" />
