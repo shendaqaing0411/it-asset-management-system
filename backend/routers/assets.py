@@ -181,28 +181,76 @@ def get_qrcode(asset_id: int):
     return StreamingResponse(buf, media_type="image/png")
 
 
+@router.get("/import/template")
+def download_import_template():
+    """下载批量导入 Excel 模板（含表头和示例数据）"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "资产导入模板"
+    headers = ["资产名称*", "分类ID*", "品牌", "型号", "序列号", "采购价格", "采购日期", "仓库ID", "部门ID", "供应商ID", "存放位置", "保修到期", "备注"]
+    ws.append(headers)
+    # 示例行
+    ws.append(["ThinkPad X1 Carbon", "1", "Lenovo", "X1 Gen11", "SN-20250001", 8999, "2025-06-01", "", "", "", "A栋3层", "2028-06-01", "开发用机"])
+    # 设置列宽
+    for i, w in enumerate([22, 10, 12, 14, 16, 12, 14, 10, 10, 10, 14, 14, 20], 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=asset_import_template.xlsx"})
+
+
 @router.post("/import")
 def import_assets(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """批量导入资产：上传 Excel 文件，支持全部资产字段"""
     db = get_db()
     wb = openpyxl.load_workbook(file.file)
     ws = wb.active
     imported = 0
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        if not row[0]:
+    errors = []
+    for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if not row or not row[0]:
+            continue
+        name = str(row[0]).strip() if row[0] else ""
+        if not name:
+            errors.append(f"第{i}行：资产名称为空，已跳过")
+            continue
+        try:
+            category_id = int(row[1]) if row[1] else 0
+        except (ValueError, TypeError):
+            errors.append(f"第{i}行：分类ID格式错误，已跳过")
+            continue
+        if category_id <= 0:
+            errors.append(f"第{i}行：分类ID无效，已跳过")
             continue
         asset_no = _gen_asset_no(db)
+        purchase_price = float(row[5]) if row[5] else 0
+        purchase_date = str(row[6]) if row[6] else None
+        warehouse_id = int(row[7]) if row[7] else None
+        dept_id = int(row[8]) if row[8] else None
+        supplier_id = int(row[9]) if row[9] else None
+        location = str(row[10]) if row[10] else None
+        warranty_date = str(row[11]) if row[11] else None
+        remark = str(row[12]) if len(row) > 12 and row[12] else None
         db.execute(
             """INSERT INTO assets (asset_no, name, category_id, brand, model, serial_no,
-               purchase_price, purchase_date, status)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
-            (asset_no, row[0] or "", int(row[1] or 0), row[2] or "", row[3] or "",
-             row[4] or "", float(row[5] or 0), str(row[6] or "") or None, "in_stock")
+               purchase_price, purchase_date, status, warehouse_id, dept_id, supplier_id,
+               location, warranty_date, remark)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (asset_no, name, category_id, str(row[2]) if row[2] else None,
+             str(row[3]) if row[3] else None, str(row[4]) if row[4] else None,
+             purchase_price, purchase_date, "in_stock",
+             warehouse_id, dept_id, supplier_id, location, warranty_date, remark)
         )
         imported += 1
     db.commit()
     _log(db, user["id"], f"批量导入资产 {imported} 条")
     db.close()
-    return Response(data={"count": imported}, message=f"导入成功 {imported} 条").model_dump()
+    result = {"count": imported}
+    if errors:
+        result["errors"] = errors[:20]  # 最多返回前20条错误
+    return Response(data=result, message=f"导入成功 {imported} 条" + (f"，{len(errors)} 条失败" if errors else "")).model_dump()
 
 
 @router.get("/export/all")
