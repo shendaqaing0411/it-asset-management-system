@@ -211,15 +211,35 @@ def delete_warning(warn_id: int, user: dict = Depends(get_current_user)):
 
 # ---- 操作日志 ----
 @router.get("/logs")
-def list_logs(page: int = Query(1), page_size: int = Query(50), user: dict = Depends(get_current_user)):
+def list_logs(
+    page: int = Query(1),
+    page_size: int = Query(50),
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    keyword: str = Query(None),
+    user: dict = Depends(get_current_user)
+):
+    """分页查询操作日志，支持日期范围和关键字筛选"""
     db = get_db()
-    total = db.execute("SELECT COUNT(*) FROM operation_logs").fetchone()[0]
+    conditions = []
+    params = []
+    if start_date:
+        conditions.append("DATE(l.create_time) >= ?")
+        params.append(start_date)
+    if end_date:
+        conditions.append("DATE(l.create_time) <= ?")
+        params.append(end_date)
+    if keyword:
+        conditions.append("(l.description LIKE ? OR u.username LIKE ? OR u.real_name LIKE ?)")
+        params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+    total = db.execute(f"SELECT COUNT(*) FROM operation_logs l LEFT JOIN users u ON l.user_id = u.id {where}", params).fetchone()[0]
     offset = (page - 1) * page_size
     rows = db.execute(
-        """SELECT l.*, u.username, u.real_name
+        f"""SELECT l.*, u.username, u.real_name
            FROM operation_logs l LEFT JOIN users u ON l.user_id = u.id
-           ORDER BY l.id DESC LIMIT ? OFFSET ?""",
-        (page_size, offset)
+           {where} ORDER BY l.id DESC LIMIT ? OFFSET ?""",
+        params + [page_size, offset]
     ).fetchall()
     db.close()
     return Response(data={"total": total, "page": page, "page_size": page_size, "items": [dict(r) for r in rows]}).model_dump()

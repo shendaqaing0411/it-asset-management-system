@@ -35,6 +35,10 @@ def list_repairs(page: int = Query(1), page_size: int = Query(20), user: dict = 
 def create_repair(req: RepairCreate, user: dict = Depends(get_current_user)):
     """创建维修记录，同时将资产状态更新为"维修中" """
     db = get_db()
+    asset = db.execute("SELECT id FROM assets WHERE id = ?", (req.asset_id,)).fetchone()
+    if not asset:
+        db.close()
+        return Response(code=1, message="资产不存在").model_dump()
     db.execute(
         """INSERT INTO repairs (asset_id, fault_desc, repair_type, repair_cost, repair_date)
            VALUES (?,?,?,?,?)""",
