@@ -57,3 +57,13 @@ def get_current_user(authorization: str = Header(...)):
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
     return dict(user)
+
+
+def require_role(*roles: str):
+    """返回一个依赖函数，验证当前用户是否拥有指定角色之一。
+    用法：user: dict = Depends(require_role("super_admin", "asset_admin"))"""
+    def _check(user: dict = Depends(get_current_user)):
+        if user["role"] not in roles:
+            raise HTTPException(status_code=403, detail="权限不足")
+        return user
+    return _check

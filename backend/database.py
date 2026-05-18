@@ -22,7 +22,6 @@ def init_db():
     """初始化数据库：建表 + 种子数据（仅首次运行）"""
     conn = get_db()
     cursor = conn.cursor()
-    # 共 11 张业务表
     cursor.executescript('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,12 +157,69 @@ def init_db():
             FOREIGN KEY (field_id) REFERENCES dict_fields(id) ON DELETE CASCADE,
             UNIQUE(field_id, record_id)
         );
+
+        CREATE TABLE IF NOT EXISTS scraps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            asset_id INTEGER NOT NULL,
+            scrap_reason VARCHAR(20) NOT NULL,
+            aging_match INTEGER DEFAULT 0,
+            damage_responsible VARCHAR(50),
+            scrap_date DATE NOT NULL,
+            remark VARCHAR(500),
+            operator_id INTEGER,
+            create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (asset_id) REFERENCES assets(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS approvals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            asset_id INTEGER NOT NULL,
+            applicant_id INTEGER NOT NULL,
+            approver_id INTEGER,
+            dept_id INTEGER,
+            status VARCHAR(20) DEFAULT 'pending',
+            apply_reason VARCHAR(500),
+            reject_reason VARCHAR(500),
+            apply_date DATE,
+            approve_date DATE,
+            deliver_date DATE,
+            create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (asset_id) REFERENCES assets(id),
+            FOREIGN KEY (applicant_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            type VARCHAR(30) NOT NULL,
+            title VARCHAR(200) NOT NULL,
+            content VARCHAR(500),
+            is_read INTEGER DEFAULT 0,
+            ref_id INTEGER,
+            create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     ''')
     # 迁移：为已有数据库添加新字段（CREATE TABLE IF NOT EXISTS 不会修改已有表）
+    migrations = [
+        "ALTER TABLE assets ADD COLUMN purchase_lifespan_years INTEGER DEFAULT 0",
+        "ALTER TABLE assets ADD COLUMN depreciation_method VARCHAR(20) DEFAULT 'straight'",
+        "ALTER TABLE assets ADD COLUMN monthly_depreciation DECIMAL(12,2) DEFAULT 0",
+        "ALTER TABLE assets ADD COLUMN accumulated_depreciation DECIMAL(12,2) DEFAULT 0",
+        "ALTER TABLE assets ADD COLUMN net_value DECIMAL(12,2) DEFAULT 0",
+        "ALTER TABLE repairs ADD COLUMN repair_method VARCHAR(20)",
+        "ALTER TABLE repairs ADD COLUMN return_date DATE",
+        "ALTER TABLE repairs ADD COLUMN return_confirmed INTEGER DEFAULT 0",
+    ]
+    for m in migrations:
+        try:
+            cursor.execute(m)
+        except sqlite3.OperationalError:
+            pass  # 字段/表已存在
+    # 将已有 admin 的 role 从 'admin' 更新为 'super_admin'
     try:
-        cursor.execute("ALTER TABLE assets ADD COLUMN purchase_lifespan_years INTEGER DEFAULT 0")
+        cursor.execute("UPDATE users SET role = 'super_admin' WHERE role = 'admin'")
     except sqlite3.OperationalError:
-        pass  # 字段已存在
+        pass
     conn.commit()
     _seed_data(conn)
     conn.close()
@@ -172,13 +228,12 @@ def init_db():
 def _seed_data(conn):
     import bcrypt
     cursor = conn.cursor()
-    # 检查是否已有管理员
     row = cursor.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
     if not row:
         pwd = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
         cursor.execute(
             "INSERT INTO users (username, password, real_name, role) VALUES (?, ?, ?, ?)",
-            ("admin", pwd, "管理员", "admin")
+            ("admin", pwd, "管理员", "super_admin")
         )
         # 默认分类
         for name in ["办公设备", "网络设备", "配件耗材", "软件授权"]:

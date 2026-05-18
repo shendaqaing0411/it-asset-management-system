@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from database import get_db
-from auth import get_current_user
-from auth import hash_password
+from auth import get_current_user, require_role, hash_password
 from schemas import (
     DeptCreate, CategoryCreate, SupplierCreate, WarehouseCreate, WarningCreate,
     UserCreate, UserUpdate, UserPasswordReset, Response
@@ -20,9 +19,7 @@ def list_depts(user: dict = Depends(get_current_user)):
 
 
 @router.post("/departments")
-def create_dept(req: DeptCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def create_dept(req: DeptCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     db.execute("INSERT INTO departments (name, parent_id, sort_order) VALUES (?,?,?)",
                (req.name, req.parent_id, req.sort_order))
@@ -33,9 +30,7 @@ def create_dept(req: DeptCreate, user: dict = Depends(get_current_user)):
 
 
 @router.put("/departments/{dept_id}")
-def update_dept(dept_id: int, req: DeptCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def update_dept(dept_id: int, req: DeptCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM departments WHERE id = ?", (dept_id,)).fetchone()
     if not existing:
@@ -49,9 +44,7 @@ def update_dept(dept_id: int, req: DeptCreate, user: dict = Depends(get_current_
 
 
 @router.delete("/departments/{dept_id}")
-def delete_dept(dept_id: int, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def delete_dept(dept_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM departments WHERE id = ?", (dept_id,)).fetchone()
     if not existing:
@@ -85,9 +78,7 @@ def list_categories(tree: bool = Query(False), user: dict = Depends(get_current_
 
 
 @router.post("/categories")
-def create_category(req: CategoryCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def create_category(req: CategoryCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     db.execute("INSERT INTO categories (name, parent_id, sort_order) VALUES (?,?,?)",
                (req.name, req.parent_id, req.sort_order))
@@ -98,9 +89,7 @@ def create_category(req: CategoryCreate, user: dict = Depends(get_current_user))
 
 
 @router.put("/categories/{cat_id}")
-def update_category(cat_id: int, req: CategoryCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def update_category(cat_id: int, req: CategoryCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM categories WHERE id = ?", (cat_id,)).fetchone()
     if not existing:
@@ -114,9 +103,7 @@ def update_category(cat_id: int, req: CategoryCreate, user: dict = Depends(get_c
 
 
 @router.delete("/categories/{cat_id}")
-def delete_category(cat_id: int, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def delete_category(cat_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM categories WHERE id = ?", (cat_id,)).fetchone()
     if not existing:
@@ -146,9 +133,7 @@ def list_suppliers(user: dict = Depends(get_current_user)):
 
 
 @router.post("/suppliers")
-def create_supplier(req: SupplierCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def create_supplier(req: SupplierCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     db.execute("INSERT INTO suppliers (name, contact, phone, address, remark) VALUES (?,?,?,?,?)",
                (req.name, req.contact, req.phone, req.address, req.remark))
@@ -159,9 +144,7 @@ def create_supplier(req: SupplierCreate, user: dict = Depends(get_current_user))
 
 
 @router.put("/suppliers/{sup_id}")
-def update_supplier(sup_id: int, req: SupplierCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def update_supplier(sup_id: int, req: SupplierCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM suppliers WHERE id = ?", (sup_id,)).fetchone()
     if not existing:
@@ -175,9 +158,7 @@ def update_supplier(sup_id: int, req: SupplierCreate, user: dict = Depends(get_c
 
 
 @router.delete("/suppliers/{sup_id}")
-def delete_supplier(sup_id: int, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def delete_supplier(sup_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM suppliers WHERE id = ?", (sup_id,)).fetchone()
     if not existing:
@@ -199,9 +180,7 @@ def list_warehouses(user: dict = Depends(get_current_user)):
 
 
 @router.post("/warehouses")
-def create_warehouse(req: WarehouseCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def create_warehouse(req: WarehouseCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     db.execute("INSERT INTO warehouses (name, location, manager_id) VALUES (?,?,?)",
                (req.name, req.location, req.manager_id))
@@ -212,9 +191,7 @@ def create_warehouse(req: WarehouseCreate, user: dict = Depends(get_current_user
 
 
 @router.put("/warehouses/{wh_id}")
-def update_warehouse(wh_id: int, req: WarehouseCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def update_warehouse(wh_id: int, req: WarehouseCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM warehouses WHERE id = ?", (wh_id,)).fetchone()
     if not existing:
@@ -228,9 +205,7 @@ def update_warehouse(wh_id: int, req: WarehouseCreate, user: dict = Depends(get_
 
 
 @router.delete("/warehouses/{wh_id}")
-def delete_warehouse(wh_id: int, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def delete_warehouse(wh_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM warehouses WHERE id = ?", (wh_id,)).fetchone()
     if not existing:
@@ -261,9 +236,7 @@ def list_warnings(user: dict = Depends(get_current_user)):
 
 
 @router.post("/warnings")
-def create_warning(req: WarningCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def create_warning(req: WarningCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     db.execute(
         "INSERT INTO stock_warnings (warehouse_id, category_id, min_stock, max_stock) VALUES (?,?,?,?)",
@@ -276,9 +249,7 @@ def create_warning(req: WarningCreate, user: dict = Depends(get_current_user)):
 
 
 @router.put("/warnings/{warn_id}")
-def update_warning(warn_id: int, req: WarningCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def update_warning(warn_id: int, req: WarningCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM stock_warnings WHERE id = ?", (warn_id,)).fetchone()
     if not existing:
@@ -294,9 +265,7 @@ def update_warning(warn_id: int, req: WarningCreate, user: dict = Depends(get_cu
 
 
 @router.delete("/warnings/{warn_id}")
-def delete_warning(warn_id: int, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def delete_warning(warn_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM stock_warnings WHERE id = ?", (warn_id,)).fetchone()
     if not existing:
@@ -354,9 +323,7 @@ def list_users(user: dict = Depends(get_current_user)):
 
 
 @router.post("/users")
-def create_user(req: UserCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def create_user(req: UserCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT id FROM users WHERE username = ?", (req.username,)).fetchone()
     if existing:
@@ -377,9 +344,7 @@ def create_user(req: UserCreate, user: dict = Depends(get_current_user)):
 
 
 @router.put("/users/{user_id}")
-def update_user(user_id: int, req: UserUpdate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def update_user(user_id: int, req: UserUpdate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if not existing:
@@ -398,9 +363,7 @@ def update_user(user_id: int, req: UserUpdate, user: dict = Depends(get_current_
 
 
 @router.put("/users/{user_id}/password")
-def reset_user_password(user_id: int, req: UserPasswordReset, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def reset_user_password(user_id: int, req: UserPasswordReset, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if not existing:
@@ -417,9 +380,7 @@ def reset_user_password(user_id: int, req: UserPasswordReset, user: dict = Depen
 
 
 @router.delete("/users/{user_id}")
-def delete_user(user_id: int, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def delete_user(user_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     if user_id == user["id"]:
         return Response(code=1, message="不能删除自己").model_dump()
     db = get_db()

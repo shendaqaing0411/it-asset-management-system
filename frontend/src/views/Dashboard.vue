@@ -2,7 +2,7 @@
   <div class="dashboard">
     <!-- stat cards -->
     <div class="stat-grid">
-      <div class="stat-card" v-for="card in statCards" :key="card.label">
+      <div class="stat-card" v-for="card in statCards" :key="card.label" :style="{ cursor: card.link ? 'pointer' : 'default' }" @click="card.link && $router.push(card.link)">
         <div class="stat-icon" :style="{ background: card.bg, color: card.color }"><el-icon :size="22"><component :is="card.icon" /></el-icon></div>
         <div class="stat-info">
           <div class="stat-value" :style="{ color: card.color }">{{ card.value }}</div>
@@ -71,7 +71,9 @@ const statCards = ref([
   { label: '使用中', value: 0, color: '#f5a623', bg: '#fef7e8', icon: 'User' },
   { label: '维修中', value: 0, color: '#f55858', bg: '#feecec', icon: 'Tools' },
   { label: '借出', value: 0, color: '#909399', bg: '#f0f0f0', icon: 'Share' },
-  { label: '已报废', value: 0, color: '#b0b3ba', bg: '#f5f5f5', icon: 'Delete' }
+  { label: '已报废', value: 0, color: '#b0b3ba', bg: '#f5f5f5', icon: 'Delete' },
+  { label: '即将过保', value: 0, color: '#f55858', bg: '#fff5f5', icon: 'Warning', link: '/assets/list' },
+  { label: '待审批', value: 0, color: '#5b7cfa', bg: '#eef1fe', icon: 'DocumentChecked', link: '/stock/approvals' }
 ])
 const barChartRef = ref(null)
 const pieChartRef = ref(null)
@@ -164,6 +166,14 @@ onMounted(async () => {
     try {
       const w = await api.get('/stock/warnings')
       warnings.value = w.data.filter(x => x.warning)
+    } catch {}
+    try {
+      const wa = await api.get('/assets/warranty-alerts', { params: { days: 30 } })
+      statCards.value[6].value = wa.data?.length || wa.data?.total || 0
+    } catch {}
+    try {
+      const ac = await api.get('/approvals', { params: { status: 'pending' } })
+      statCards.value[7].value = ac.data?.total || ac.data?.length || 0
     } catch {}
   } catch (e) {
     ElMessage.error('仪表盘数据加载失败')

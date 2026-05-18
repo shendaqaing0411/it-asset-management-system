@@ -5,7 +5,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from database import get_db
 from auth import get_current_user
-from schemas import StockInReq, StockOutReq, StockTransferReq, Response
+from schemas import StockInReq, StockOutReq, StockTransferReq, CheckReq, Response
 
 router = APIRouter(prefix="/api/stock", tags=["库存管理"])
 
@@ -215,3 +215,39 @@ def get_warnings(user: dict = Depends(get_current_user)):
         result.append(item)
     db.close()
     return Response(data=result).model_dump()
+
+
+@router.post("/check")
+def stock_check(req: CheckReq, user: dict = Depends(get_current_user)):
+    """盘点确认：接收盘点结果数组，盘盈→入库记录，盘亏→出库记录"""
+    db = get_db()
+    today = date.today().isoformat()
+    surplus_count = 0
+    loss_count = 0
+    for item in req.items:
+        asset_id = item.get("asset_id")
+        result = item.get("result")
+        remark = item.get("remark", "")
+        asset = db.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
+        if not asset:
+            continue
+        if result == "surplus":
+            db.execute(
+                """INSERT INTO stock_records (asset_id, type, quantity, operator_id, operate_date, remark)
+                   VALUES (?,?,?,?,?,?)""",
+                (asset_id, "盘盈入库", 1, user["id"], today, remark)
+            )
+            db.execute("UPDATE assets SET status='in_stock', update_time=CURRENT_TIMESTAMP WHERE id=?", (asset_id,))
+            surplus_count += 1
+        elif result == "loss":
+            db.execute(
+                """INSERT INTO stock_records (asset_id, type, quantity, operator_id, operate_date, remark)
+                   VALUES (?,?,?,?,?,?)""",
+                (asset_id, "盘亏出库", 1, user["id"], today, remark)
+            )
+            db.execute("UPDATE assets SET status='scrapped', update_time=CURRENT_TIMESTAMP WHERE id=?", (asset_id,))
+            loss_count += 1
+    db.commit()
+    _log(db, user["id"], f"盘点确认: 盘盈 {surplus_count} 条, 盘亏 {loss_count} 条")
+    db.close()
+    return Response(data={"surplus": surplus_count, "loss": loss_count}, message="盘点完成").model_dump()

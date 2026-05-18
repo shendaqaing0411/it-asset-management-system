@@ -44,6 +44,7 @@ class AssetCreate(BaseModel):
     warranty_date: Optional[date] = None
     remark: Optional[str] = None
     purchase_lifespan_years: Optional[int] = Field(default=0, ge=0)
+    depreciation_method: Optional[str] = "straight"
 
 
 class AssetUpdate(BaseModel):
@@ -62,6 +63,7 @@ class AssetUpdate(BaseModel):
     warranty_date: Optional[date] = None
     remark: Optional[str] = None
     purchase_lifespan_years: Optional[int] = Field(default=None, ge=0)
+    depreciation_method: Optional[str] = None
 
 
 # ---- 库存 ----
@@ -97,6 +99,7 @@ class RepairCreate(BaseModel):
     asset_id: int = Field(..., gt=0)
     fault_desc: Optional[str] = None
     repair_type: Optional[str] = None
+    repair_method: Optional[str] = None
     repair_cost: float = Field(default=0, ge=0)
     repair_date: Optional[date] = None
 
@@ -104,16 +107,37 @@ class RepairCreate(BaseModel):
 class RepairUpdate(BaseModel):
     fault_desc: Optional[str] = None
     repair_type: Optional[str] = None
+    repair_method: Optional[str] = None
     repair_cost: Optional[float] = Field(default=None, ge=0)
     finish_date: Optional[date] = None
     status: Optional[str] = None
     remark: Optional[str] = None
 
 
+class RepairReturnReq(BaseModel):
+    return_date: date
+
+
 # ---- 报废 ----
-class ScrapReq(BaseModel):
+class ScrapCreate(BaseModel):
     asset_id: int = Field(..., gt=0)
+    scrap_reason: str = Field(..., min_length=1)
+    aging_match: int = 0
+    damage_responsible: Optional[str] = None
+    scrap_date: date
     remark: Optional[str] = None
+
+
+# ---- 审批 ----
+class ApprovalCreate(BaseModel):
+    asset_id: int = Field(..., gt=0)
+    dept_id: int = Field(..., gt=0)
+    apply_reason: Optional[str] = None
+
+
+class ApprovalApprove(BaseModel):
+    approved: bool
+    reject_reason: Optional[str] = None
 
 
 # ---- 基础数据 ----
@@ -175,3 +199,13 @@ class CheckPlan(BaseModel):
     warehouse_id: Optional[int] = None
     category_id: Optional[int] = None
     remark: Optional[str] = None
+
+
+class CheckItem(BaseModel):
+    asset_id: int = Field(..., gt=0)
+    result: str = Field(...)
+    remark: Optional[str] = None
+
+
+class CheckReq(BaseModel):
+    items: list

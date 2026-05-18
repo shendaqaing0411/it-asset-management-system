@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from database import get_db
-from auth import get_current_user
+from auth import get_current_user, require_role
 from schemas import Response
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -50,9 +50,7 @@ def list_fields(module: Optional[str] = Query(None), user: dict = Depends(get_cu
 
 
 @router.post("/fields")
-def create_field(req: DictFieldCreate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def create_field(req: DictFieldCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute(
         "SELECT id FROM dict_fields WHERE module = ? AND field_key = ?",
@@ -74,9 +72,7 @@ def create_field(req: DictFieldCreate, user: dict = Depends(get_current_user)):
 
 
 @router.put("/fields/{field_id}")
-def update_field(field_id: int, req: DictFieldUpdate, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def update_field(field_id: int, req: DictFieldUpdate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     existing = db.execute("SELECT * FROM dict_fields WHERE id = ?", (field_id,)).fetchone()
     if not existing:
@@ -92,9 +88,7 @@ def update_field(field_id: int, req: DictFieldUpdate, user: dict = Depends(get_c
 
 
 @router.delete("/fields/{field_id}")
-def delete_field(field_id: int, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
-        return Response(code=1, message="仅管理员可操作").model_dump()
+def delete_field(field_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
     db = get_db()
     db.execute("DELETE FROM dict_fields WHERE id = ?", (field_id,))
     db.commit()

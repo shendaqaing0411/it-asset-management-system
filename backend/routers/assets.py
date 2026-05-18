@@ -1,8 +1,9 @@
-# 资产管理路由：资产 CRUD、二维码生成、Excel 导入导出
+# 资产管理路由：资产 CRUD、二维码生成、Excel 导入导出、时间线、保修提醒、折旧计算
 # 资产编号自动生成规则：IT-YYYYMM-NNNN（年、月、4位流水号）
 
 import io
-from datetime import datetime
+import csv
+from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from database import get_db
@@ -15,7 +16,6 @@ router = APIRouter(prefix="/api/assets", tags=["资产管理"])
 
 
 def _format_asset(row):
-    """将数据库行对象格式化为标准字典"""
     return {
         "id": row["id"], "asset_no": row["asset_no"], "name": row["name"],
         "category_id": row["category_id"], "brand": row["brand"], "model": row["model"],
@@ -25,12 +25,15 @@ def _format_asset(row):
         "warehouse_id": row["warehouse_id"], "location": row["location"],
         "supplier_id": row["supplier_id"], "warranty_date": row["warranty_date"],
         "remark": row["remark"], "create_time": row["create_time"], "update_time": row["update_time"],
-        "purchase_lifespan_years": row["purchase_lifespan_years"] if "purchase_lifespan_years" in row.keys() else 0
+        "purchase_lifespan_years": row["purchase_lifespan_years"] if "purchase_lifespan_years" in row.keys() else 0,
+        "depreciation_method": row["depreciation_method"] if "depreciation_method" in row.keys() else "straight",
+        "monthly_depreciation": row["monthly_depreciation"] if "monthly_depreciation" in row.keys() else 0,
+        "accumulated_depreciation": row["accumulated_depreciation"] if "accumulated_depreciation" in row.keys() else 0,
+        "net_value": row["net_value"] if "net_value" in row.keys() else 0,
     }
 
 
 def _gen_asset_no(db) -> str:
-    """生成资产编号：IT-YYYYMM-NNNN，每月从001开始递增"""
     now = datetime.now()
     ym = now.strftime("%Y%m")
     row = db.execute(
@@ -54,6 +57,7 @@ def list_assets(
     keyword: str = Query(None), category_id: int = Query(None),
     status: str = Query(None), dept_id: int = Query(None), warehouse_id: int = Query(None),
     page: int = Query(1), page_size: int = Query(20),
+    format: str = Query(None),
     user: dict = Depends(get_current_user)
 ):
     db = get_db()
@@ -75,6 +79,31 @@ def list_assets(
         conditions.append("a.warehouse_id = ?")
         params.append(warehouse_id)
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    # CSV 导出
+    if format == "csv":
+        rows = db.execute(
+            f"""SELECT a.*, c.name as category_name, d.name as dept_name, w.name as warehouse_name
+               FROM assets a
+               LEFT JOIN categories c ON a.category_id = c.id
+               LEFT JOIN departments d ON a.dept_id = d.id
+               LEFT JOIN warehouses w ON a.warehouse_id = w.id
+               {where} ORDER BY a.id DESC""",
+            params
+        ).fetchall()
+        db.close()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["资产编号", "名称", "分类", "品牌", "型号", "序列号", "采购价格", "采购日期",
+                          "状态", "部门", "仓库", "存放位置", "保修到期", "备注"])
+        for r in rows:
+            writer.writerow([r["asset_no"], r["name"], r["category_name"], r["brand"], r["model"],
+                             r["serial_no"], r["purchase_price"], r["purchase_date"], r["status"],
+                             r["dept_name"], r["warehouse_name"], r["location"], r["warranty_date"], r["remark"]])
+        output.seek(0)
+        return StreamingResponse(iter([output.getvalue()]), media_type="text/csv; charset=utf-8",
+                                 headers={"Content-Disposition": "attachment; filename=assets.csv"})
+
     total = db.execute(f"SELECT COUNT(*) FROM assets a {where}", params).fetchone()[0]
     offset = (page - 1) * page_size
     rows = db.execute(
@@ -101,11 +130,27 @@ def list_assets(
 
 @router.get("/names")
 def get_asset_names(user: dict = Depends(get_current_user)):
-    """Return distinct asset names for autocomplete"""
     db = get_db()
     rows = db.execute("SELECT DISTINCT name FROM assets ORDER BY name").fetchall()
     db.close()
     return Response(data=[r["name"] for r in rows]).model_dump()
+
+
+@router.get("/warranty-alerts")
+def warranty_alerts(days: int = Query(30), user: dict = Depends(get_current_user)):
+    """返回保修到期日在 [today, today+days] 范围内的资产列表"""
+    db = get_db()
+    today = date.today()
+    end_date = (today + timedelta(days=days)).isoformat()
+    rows = db.execute(
+        """SELECT a.*, c.name as category_name
+           FROM assets a LEFT JOIN categories c ON a.category_id = c.id
+           WHERE a.warranty_date >= ? AND a.warranty_date <= ?
+           ORDER BY a.warranty_date ASC""",
+        (today.isoformat(), end_date)
+    ).fetchall()
+    db.close()
+    return Response(data=[dict(r) for r in rows]).model_dump()
 
 
 @router.get("/{asset_id}")
@@ -118,10 +163,44 @@ def get_asset(asset_id: int, user: dict = Depends(get_current_user)):
     return Response(data=_format_asset(row)).model_dump()
 
 
+@router.get("/{asset_id}/timeline")
+def asset_timeline(asset_id: int, user: dict = Depends(get_current_user)):
+    """资产全生命周期时间线：UNION ALL stock_records + repairs + scraps"""
+    db = get_db()
+    rows = db.execute(
+        """SELECT s.operate_date as time, s.type, s.remark as detail, u.real_name as operator
+           FROM stock_records s LEFT JOIN users u ON s.operator_id = u.id
+           WHERE s.asset_id = ?
+        UNION ALL
+           SELECT r.repair_date as time, '维修' as type, r.fault_desc as detail, u.real_name as operator
+           FROM repairs r LEFT JOIN users u ON r.operator_id = u.id
+           WHERE r.asset_id = ?
+        UNION ALL
+           SELECT sc.scrap_date as time, '报废' as type, sc.scrap_reason as detail, u.real_name as operator
+           FROM scraps sc LEFT JOIN users u ON sc.operator_id = u.id
+           WHERE sc.asset_id = ?
+        ORDER BY time ASC""",
+        (asset_id, asset_id, asset_id)
+    ).fetchall()
+    # Also include repair return events
+    returns = db.execute(
+        """SELECT r.return_date as time, '返修入库' as type, '维修完成，返修入库' as detail, u.real_name as operator
+           FROM repairs r LEFT JOIN users u ON r.operator_id = u.id
+           WHERE r.asset_id = ? AND r.return_confirmed = 1""",
+        (asset_id,)
+    ).fetchall()
+    db.close()
+    result = [{"time": r["time"], "type": r["type"], "detail": r["detail"], "operator": r["operator"]} for r in rows]
+    for r in returns:
+        if r["time"]:
+            result.append({"time": r["time"], "type": r["type"], "detail": r["detail"], "operator": r["operator"]})
+    result.sort(key=lambda x: x["time"] or "")
+    return Response(data=result).model_dump()
+
+
 @router.post("")
 def create_asset(req: AssetCreate, user: dict = Depends(get_current_user)):
     db = get_db()
-    # 校验分类必须是二级类目
     cat = db.execute("SELECT * FROM categories WHERE id = ?", (req.category_id,)).fetchone()
     if not cat:
         db.close()
@@ -130,15 +209,16 @@ def create_asset(req: AssetCreate, user: dict = Depends(get_current_user)):
         db.close()
         return Response(code=1, message="资产必须登记在二级类目下，请选择具体子分类").model_dump()
     asset_no = _gen_asset_no(db)
+    method = req.depreciation_method or "straight"
     db.execute(
         """INSERT INTO assets (asset_no, name, category_id, brand, model, serial_no,
            purchase_price, purchase_date, dept_id, user_id, warehouse_id, location,
-           supplier_id, warranty_date, remark, purchase_lifespan_years)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           supplier_id, warranty_date, remark, purchase_lifespan_years, depreciation_method)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (asset_no, req.name, req.category_id, req.brand, req.model, req.serial_no,
          req.purchase_price, req.purchase_date, req.dept_id, req.user_id,
          req.warehouse_id, req.location, req.supplier_id, req.warranty_date, req.remark,
-         req.purchase_lifespan_years or 0)
+         req.purchase_lifespan_years or 0, method)
     )
     db.commit()
     asset_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -168,7 +248,7 @@ def update_asset(asset_id: int, req: AssetUpdate, user: dict = Depends(get_curre
 
 @router.delete("/{asset_id}")
 def delete_asset(asset_id: int, user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
+    if user["role"] not in ("super_admin", "asset_admin"):
         return Response(code=1, message="仅管理员可删除资产").model_dump()
     db = get_db()
     existing = db.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
@@ -187,9 +267,43 @@ def delete_asset(asset_id: int, user: dict = Depends(get_current_user)):
     return Response(message="删除成功").model_dump()
 
 
+@router.post("/calculate-depreciation")
+def calculate_depreciation(user: dict = Depends(get_current_user)):
+    """遍历所有 in_stock/in_use 资产，计算折旧"""
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM assets WHERE status IN ('in_stock','in_use')"
+    ).fetchall()
+    updated = 0
+    for a in rows:
+        method = a["depreciation_method"] if "depreciation_method" in a.keys() and a["depreciation_method"] else "straight"
+        price = a["purchase_price"] or 0
+        lifespan = a["purchase_lifespan_years"] if "purchase_lifespan_years" in a.keys() and a["purchase_lifespan_years"] else 0
+        if method == "once":
+            monthly = float(price)
+            accumulated = float(price)
+            net = 0
+        elif lifespan > 0:
+            monthly = price / (lifespan * 12)
+            accumulated = float(a["accumulated_depreciation"] or 0) + monthly if "accumulated_depreciation" in a.keys() else monthly
+            net = max(price - accumulated, 0)
+        else:
+            monthly = 0
+            accumulated = float(a["accumulated_depreciation"] or 0) if "accumulated_depreciation" in a.keys() else 0
+            net = price
+        db.execute(
+            "UPDATE assets SET monthly_depreciation=?, accumulated_depreciation=?, net_value=? WHERE id=?",
+            (round(monthly, 2), round(accumulated, 2), round(net, 2), a["id"])
+        )
+        updated += 1
+    db.commit()
+    _log(db, user["id"], f"折旧计算完成，更新 {updated} 条资产")
+    db.close()
+    return Response(data={"updated": updated}, message="折旧计算完成").model_dump()
+
+
 @router.get("/qrcode/{asset_id}")
 def get_qrcode(asset_id: int):
-    """为指定资产生成二维码图片（PNG格式），内容为资产编号"""
     db = get_db()
     row = db.execute("SELECT asset_no FROM assets WHERE id = ?", (asset_id,)).fetchone()
     db.close()
@@ -204,15 +318,12 @@ def get_qrcode(asset_id: int):
 
 @router.get("/import/template")
 def download_import_template():
-    """下载批量导入 Excel 模板（含表头和示例数据）"""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "资产导入模板"
     headers = ["资产名称*", "分类ID*", "品牌", "型号", "序列号", "采购价格", "采购日期", "仓库ID", "部门ID", "供应商ID", "存放位置", "保修到期", "备注"]
     ws.append(headers)
-    # 示例行
     ws.append(["ThinkPad X1 Carbon", "1", "Lenovo", "X1 Gen11", "SN-20250001", 8999, "2025-06-01", "", "", "", "A栋3层", "2028-06-01", "开发用机"])
-    # 设置列宽
     for i, w in enumerate([22, 10, 12, 14, 16, 12, 14, 10, 10, 10, 14, 14, 20], 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
     buf = io.BytesIO()
@@ -224,7 +335,6 @@ def download_import_template():
 
 @router.post("/import")
 def import_assets(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """批量导入资产：上传 Excel 文件，支持全部资产字段"""
     db = get_db()
     wb = openpyxl.load_workbook(file.file)
     ws = wb.active
@@ -270,7 +380,7 @@ def import_assets(file: UploadFile = File(...), user: dict = Depends(get_current
     db.close()
     result = {"count": imported}
     if errors:
-        result["errors"] = errors[:20]  # 最多返回前20条错误
+        result["errors"] = errors[:20]
     return Response(data=result, message=f"导入成功 {imported} 条" + (f"，{len(errors)} 条失败" if errors else "")).model_dump()
 
 

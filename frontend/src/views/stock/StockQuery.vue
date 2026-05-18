@@ -5,7 +5,7 @@
       <el-form-item label="分类"><el-select v-model="query.category_id" clearable><el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" /></el-select></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" clearable><el-option label="在库" value="in_stock" /><el-option label="使用中" value="in_use" /><el-option label="借出" value="borrowed" /><el-option label="维修中" value="repairing" /><el-option label="已报废" value="scrapped" /></el-select></el-form-item>
       <el-form-item label="仓库"><el-select v-model="query.warehouse_id" clearable><el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" /></el-select></el-form-item>
-      <el-form-item><el-button type="primary" @click="fetch">查询</el-button><el-button @click="reset">重置</el-button></el-form-item>
+      <el-form-item><el-button type="primary" @click="fetch">查询</el-button><el-button @click="reset">重置</el-button><el-button @click="handleExport"><el-icon style="margin-right:4px"><Download /></el-icon>导出</el-button></el-form-item>
     </el-form>
     <el-table :data="items" stripe v-loading="loading">
       <el-table-column prop="asset_no" label="资产编号" width="140" />
@@ -55,6 +55,8 @@ async function fetch() {
 }
 
 function reset() { query.keyword = ''; query.category_id = null; query.status = ''; query.warehouse_id = null; fetch() }
+
+function handleExport() { window.open('/api/stock/records?format=csv', '_blank') }
 
 async function handleAction(row, action) {
   if (action === 'in') {

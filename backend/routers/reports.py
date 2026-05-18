@@ -1,6 +1,9 @@
-# 报表统计路由：资产汇总、库存统计、出入库报表
+# 报表统计路由：资产汇总、库存统计、出入库报表、折旧报表
 
+import io
+import csv
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from database import get_db
 from auth import get_current_user
 from schemas import Response
@@ -114,4 +117,54 @@ def inout_report(
     return Response(data={
         "records": [dict(r) for r in rows],
         "summary": [dict(r) for r in summary]
+    }).model_dump()
+
+
+@router.get("/depreciation")
+def depreciation_report(format: str = Query(None), user: dict = Depends(get_current_user)):
+    """折旧报表：列出所有资产折旧状态及汇总"""
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM assets ORDER BY id DESC"
+    ).fetchall()
+    items = []
+    for a in rows:
+        method = a["depreciation_method"] if "depreciation_method" in a.keys() and a["depreciation_method"] else "straight"
+        accumulated = float(a["accumulated_depreciation"] or 0) if "accumulated_depreciation" in a.keys() else 0
+        net = float(a["net_value"] or 0) if "net_value" in a.keys() else 0
+        price = float(a["purchase_price"] or 0)
+        items.append({
+            "asset_no": a["asset_no"],
+            "name": a["name"],
+            "purchase_price": price,
+            "accumulated_depreciation": round(accumulated, 2),
+            "net_value": round(net, 2),
+            "method": method,
+            "status": "已折旧" if accumulated >= price and price > 0 else ("折旧中" if accumulated > 0 else "未折旧")
+        })
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["资产编号", "名称", "原值", "累计折旧", "净值", "折旧方法", "状态"])
+        for item in items:
+            writer.writerow([item["asset_no"], item["name"], item["purchase_price"],
+                             item["accumulated_depreciation"], item["net_value"],
+                             item["method"], item["status"]])
+        output.seek(0)
+        db.close()
+        return StreamingResponse(iter([output.getvalue()]), media_type="text/csv; charset=utf-8",
+                                 headers={"Content-Disposition": "attachment; filename=depreciation.csv"})
+
+    total_original = sum(it["purchase_price"] for it in items)
+    total_depreciation = sum(it["accumulated_depreciation"] for it in items)
+    total_net = sum(it["net_value"] for it in items)
+    db.close()
+    return Response(data={
+        "items": items,
+        "summary": {
+            "total_original": round(total_original, 2),
+            "total_depreciation": round(total_depreciation, 2),
+            "total_net": round(total_net, 2)
+        }
     }).model_dump()

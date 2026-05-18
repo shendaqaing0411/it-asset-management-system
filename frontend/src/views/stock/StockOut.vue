@@ -7,10 +7,11 @@
           <el-option v-for="a in assetOptions" :key="a.id" :label="`${a.asset_no} - ${a.name}`" :value="a.id" />
         </el-select>
       </el-form-item>
-      <el-form-item label="出库类型" prop="type"><el-select v-model="form.type" style="width:100%"><el-option label="领用出库" value="领用出库" /><el-option label="借用出库" value="借用出库" /></el-select></el-form-item>
+      <el-form-item label="出库类型" prop="type"><el-select v-model="form.type" style="width:100%"><el-option label="领用出库" value="领用出库" /><el-option label="借用出库" value="借用出库" /><el-option label="盘亏出库" value="盘亏出库" /></el-select></el-form-item>
       <el-form-item label="使用部门"><el-select v-model="form.to_dept_id" style="width:100%"><el-option v-for="d in depts" :key="d.id" :label="d.name" :value="d.id" /></el-select></el-form-item>
       <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" /></el-form-item>
       <el-form-item><el-button type="primary" @click="submit" :loading="saving">确认出库</el-button></el-form-item>
+      <el-form-item><el-button @click="handleExport"><el-icon style="margin-right:4px"><Download /></el-icon>导出</el-button></el-form-item>
     </el-form>
     <el-divider />
     <h4 style="margin-bottom:8px">最近出库记录</h4>
@@ -57,6 +58,8 @@ async function loadRecords() {
   const res = await api.get('/stock/records', { params: { type: '领用出库,借用出库', page_size: 10 } })
   records.value = res.data.items
 }
+
+function handleExport() { window.open('/api/stock/records?format=csv', '_blank') }
 
 onMounted(async () => {
   const d = await api.get('/departments'); depts.value = d.data

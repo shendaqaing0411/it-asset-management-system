@@ -18,6 +18,7 @@
           <el-menu-item index="/stock/query">库存查询</el-menu-item>
           <el-menu-item index="/stock/in">入库管理</el-menu-item>
           <el-menu-item index="/stock/out">出库管理</el-menu-item>
+          <el-menu-item index="/stock/approvals">领用审批</el-menu-item>
         </el-sub-menu>
         <el-sub-menu index="repairs">
           <template #title><el-icon><Tools /></el-icon><span>维保管理</span></template>
@@ -29,6 +30,7 @@
           <el-menu-item index="/reports/stock">库存统计</el-menu-item>
           <el-menu-item index="/reports/inout">出入库报表</el-menu-item>
           <el-menu-item index="/reports/summary">资产汇总</el-menu-item>
+          <el-menu-item index="/reports/depreciation">折旧报表</el-menu-item>
         </el-sub-menu>
         <el-sub-menu index="system">
           <template #title><el-icon><Setting /></el-icon><span>系统管理</span></template>
@@ -56,6 +58,7 @@
           </el-breadcrumb>
         </div>
         <div class="topbar-right">
+          <NotificationBell />
           <el-tooltip content="全屏" placement="bottom"><el-icon class="topbar-icon" @click="toggleFullscreen"><FullScreen /></el-icon></el-tooltip>
           <el-dropdown trigger="click">
             <span class="user-badge">
@@ -65,7 +68,7 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item disabled><el-icon><User /></el-icon> {{ user?.username }} ({{ user?.role === 'admin' ? '管理员' : '普通用户' }})</el-dropdown-item>
+                <el-dropdown-item disabled><el-icon><User /></el-icon> {{ user?.username }} ({{ roleLabel(user?.role) }})</el-dropdown-item>
                 <el-dropdown-item divided @click="logout"><el-icon><SwitchButton /></el-icon> 退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -82,6 +85,7 @@
 // 根据路由 name 自动推断面包屑父子标题
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import NotificationBell from './NotificationBell.vue'
 const route = useRoute()
 const router = useRouter()
 const user = JSON.parse(localStorage.getItem('user') || 'null')
@@ -89,8 +93,11 @@ const collapsed = ref(false)
 const activeMenu = computed(() => route.path)
 const openeds = ['assets', 'stock', 'repairs', 'reports', 'system']
 const pageTitle = computed(() => route.meta.title || '')
-const parentMap = { AssetList: '资产管理', AssetForm: '资产管理', CheckPlan: '资产管理', StockQuery: '库存管理', StockIn: '库存管理', StockOut: '库存管理', RepairList: '维保管理', ScrapList: '维保管理', StockReport: '报表统计', InoutReport: '报表统计', SummaryReport: '报表统计', Departments: '系统管理', Categories: '系统管理', Suppliers: '系统管理', Warehouses: '系统管理', Warnings: '系统管理', Logs: '系统管理', Users: '系统管理', Dict: '系统管理' }
+const parentMap = { AssetList: '资产管理', AssetForm: '资产管理', CheckPlan: '资产管理', AssetTimeline: '资产管理', StockQuery: '库存管理', StockIn: '库存管理', StockOut: '库存管理', ApprovalList: '库存管理', RepairList: '维保管理', ScrapList: '维保管理', StockReport: '报表统计', InoutReport: '报表统计', SummaryReport: '报表统计', Depreciation: '报表统计', Departments: '系统管理', Categories: '系统管理', Suppliers: '系统管理', Warehouses: '系统管理', Warnings: '系统管理', Logs: '系统管理', Users: '系统管理', Dict: '系统管理' }
 const parentTitle = computed(() => parentMap[route.name] || '')
+
+const roleMap = { super_admin: '超级管理员', asset_admin: '资产管理员', dept_manager: '部门主管', user: '普通用户', auditor: '审计员' }
+function roleLabel(r) { return roleMap[r] || r || '未知' }
 
 function toggleFullscreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen() }
 

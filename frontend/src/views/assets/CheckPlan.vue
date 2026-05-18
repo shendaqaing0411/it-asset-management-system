@@ -1,7 +1,7 @@
 <template>
   <el-card>
     <h3>资产盘点</h3>
-    <p style="color:#999;margin:8px 0">按条件筛选资产，逐项核对状态。核查后点击「已盘点」标记。</p>
+    <p style="color:#999;margin:8px 0">按条件筛选资产，逐项核对状态，选择盘点结果后确认。</p>
 
     <!-- 资产总数统计卡片 -->
     <el-row :gutter="16" style="margin-bottom:20px">
@@ -22,17 +22,24 @@
       <el-form-item label="状态"><el-select v-model="query.status" clearable><el-option label="在库" value="in_stock" /><el-option label="使用中" value="in_use" /><el-option label="借出" value="borrowed" /><el-option label="维修中" value="repairing" /><el-option label="已报废" value="scrapped" /></el-select></el-form-item>
       <el-form-item><el-button type="primary" @click="fetch">筛选</el-button></el-form-item>
     </el-form>
-    <el-table :data="items" stripe v-loading="loading" @selection-change="onSelect">
-      <el-table-column type="selection" width="40" />
+
+    <el-table :data="items" stripe v-loading="loading">
       <el-table-column prop="asset_no" label="资产编号" width="140" />
       <el-table-column prop="name" label="资产名称" />
       <el-table-column prop="category_name" label="分类" width="100" />
       <el-table-column prop="location" label="位置" width="100" />
       <el-table-column prop="status" label="当前状态" width="100"><template #default="{row}"><el-tag size="small">{{ statusMap[row.status] || row.status }}</el-tag></template></el-table-column>
-      <el-table-column label="盘点状态" width="100"><template #default><el-tag type="success" size="small">已盘点</el-tag></template></el-table-column>
-      <el-table-column label="盘点结果" width="100"><template #default><el-tag type="success" size="small">正常</el-tag></template></el-table-column>
+      <el-table-column label="盘点结果" width="150">
+        <template #default="{row}">
+          <el-select v-model="checkResults[row.id]" size="small" style="width:120px">
+            <el-option label="正常" value="normal" />
+            <el-option label="盘盈" value="surplus" />
+            <el-option label="盘亏" value="loss" />
+          </el-select>
+        </template>
+      </el-table-column>
     </el-table>
-    <el-button type="primary" @click="batchCheck" :disabled="!selected.length" style="margin-top:16px">批量标记已盘点 ({{ selected.length }})</el-button>
+    <el-button type="primary" @click="confirmCheck" :loading="checking" style="margin-top:16px">确认盘点</el-button>
   </el-card>
 </template>
 
@@ -42,24 +49,17 @@ import api from '../../api'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
+const checking = ref(false)
 const items = ref([])
-const selected = ref([])
 const categories = ref([])
 const warehouses = ref([])
 const totalCount = ref(0)
 const subStats = ref([])
 const parentCategories = ref([])
 const subCategories = ref([])
+const checkResults = reactive({})
 const query = reactive({ warehouse_id: null, category_id: null, parent_category_id: null, status: null })
-const statusMap = {
-  in_stock: '在库',
-  in_use: '使用中',
-  borrowed: '借出',
-  repairing: '维修中',
-  scrapped: '已报废'
-}
-
-function onSelect(rows) { selected.value = rows }
+const statusMap = { in_stock: '在库', in_use: '使用中', borrowed: '借出', repairing: '维修中', scrapped: '已报废' }
 
 function onParentCategoryChange() {
   query.category_id = null
@@ -71,8 +71,6 @@ function onParentCategoryChange() {
   }
 }
 
-function batchCheck() { ElMessage.success(`已标记 ${selected.value.length} 项为已盘点`); selected.value = [] }
-
 async function fetch() {
   loading.value = true
   try {
@@ -83,7 +81,10 @@ async function fetch() {
     const res = await api.get('/stock/query', { params })
     items.value = res.data.items
     totalCount.value = res.data.total
-    // 统计二级类目分布
+    // 初始化盘点结果默认值
+    items.value.forEach(item => {
+      if (!(item.id in checkResults)) checkResults[item.id] = 'normal'
+    })
     const stats = {}
     items.value.forEach(item => {
       const cn = item.category_name || '未分类'
@@ -91,6 +92,19 @@ async function fetch() {
     })
     subStats.value = Object.entries(stats).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 3)
   } finally { loading.value = false }
+}
+
+async function confirmCheck() {
+  if (!items.value.length) { ElMessage.warning('请先筛选资产'); return }
+  checking.value = true
+  try {
+    const checkItems = items.value.map(item => ({
+      asset_id: item.id,
+      result: checkResults[item.id] || 'normal'
+    }))
+    await api.post('/stock/check', { items: checkItems })
+    ElMessage.success(`盘点完成，共处理 ${checkItems.length} 项资产`)
+  } finally { checking.value = false }
 }
 
 onMounted(async () => {
