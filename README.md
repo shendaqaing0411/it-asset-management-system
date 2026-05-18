@@ -18,7 +18,8 @@
 - **库存管理** — 入库/出库/归还/调拨、库存查询、预警规则
 - **维保报废** — 维修记录管理、资产报废
 - **报表统计** — 资产汇总、库存统计、出入库明细
-- **系统管理** — 部门/分类/仓库/供应商/用户管理、操作日志
+- **数据字典** — 自定义字段管理（文本/数字/下拉/日期），资产表单动态渲染
+- **系统管理** — 部门/分类（一二级）/仓库/供应商/用户管理、操作日志（日期范围+关键字筛选）
 
 ## 下载
 
@@ -78,7 +79,8 @@ cd ../backend && pip install -r requirements.txt && python main.py
 │       ├── stock.py          # 出入库/库存/预警
 │       ├── repairs.py        # 维修/报废
 │       ├── reports.py        # 报表统计
-│       └── system.py         # 系统管理
+│       ├── system.py         # 系统管理
+│       └── dict.py           # 数据字典
 └── frontend/
     ├── package.json
     ├── vite.config.js
@@ -86,7 +88,7 @@ cd ../backend && pip install -r requirements.txt && python main.py
         ├── api/index.js      # Axios 封装
         ├── router/index.js   # 路由配置
         ├── components/       # 公共组件
-        └── views/            # 页面组件
+        └── views/            # 页面组件（含 system/Dict.vue 数据字典）
 ```
 
 ## 环境要求
