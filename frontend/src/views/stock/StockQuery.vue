@@ -2,9 +2,9 @@
   <el-card>
     <el-form :inline="true" :model="query" size="small">
       <el-form-item label="关键字"><el-input v-model="query.keyword" placeholder="编号/名称" clearable /></el-form-item>
-      <el-form-item label="分类"><el-select v-model="query.category_id" clearable><el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" /></el-select></el-form-item>
-      <el-form-item label="状态"><el-select v-model="query.status" clearable><el-option label="在库" value="in_stock" /><el-option label="使用中" value="in_use" /><el-option label="借出" value="borrowed" /><el-option label="维修中" value="repairing" /><el-option label="已报废" value="scrapped" /></el-select></el-form-item>
-      <el-form-item label="仓库"><el-select v-model="query.warehouse_id" clearable><el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" /></el-select></el-form-item>
+      <el-form-item label="分类"><el-select v-model="query.category_id" clearable style="width:160px"><el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" /></el-select></el-form-item>
+      <el-form-item label="状态"><el-select v-model="query.status" clearable style="width:140px"><el-option label="在库" value="in_stock" /><el-option label="使用中" value="in_use" /><el-option label="借出" value="borrowed" /><el-option label="维修中" value="repairing" /><el-option label="已报废" value="scrapped" /></el-select></el-form-item>
+      <el-form-item label="仓库"><el-select v-model="query.warehouse_id" clearable style="width:160px"><el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" /></el-select></el-form-item>
       <el-form-item><el-button type="primary" @click="fetch">查询</el-button><el-button @click="reset">重置</el-button><el-button @click="handleExport"><el-icon style="margin-right:4px"><Download /></el-icon>导出</el-button></el-form-item>
     </el-form>
     <el-table :data="items" stripe v-loading="loading">
@@ -30,7 +30,7 @@
 
 <script setup>
 // 库存查询：多维筛选（关键字/分类/状态/仓库），行内快捷操作（入库/出库/归还/报废）
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import api, { downloadCsv } from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -39,7 +39,7 @@ const items = ref([])
 const total = ref(0)
 const categories = ref([])
 const warehouses = ref([])
-const query = reactive({ keyword: '', category_id: null, status: '', warehouse_id: null, page: 1 })
+const query = ref({ keyword: '', category_id: null, status: null, warehouse_id: null, page: 1 })
 
 const statusMap = { in_stock: '在库', in_use: '使用中', borrowed: '借出', repairing: '维修中', scrapped: '已报废' }
 const statusTypeMap = { in_stock: 'success', in_use: '', borrowed: 'warning', repairing: 'danger', scrapped: 'info' }
@@ -49,13 +49,13 @@ function statusType(s) { return statusTypeMap[s] || '' }
 async function fetch() {
   loading.value = true
   try {
-    const res = await api.get('/stock/query', { params: { ...query, category_id: query.category_id || undefined, status: query.status || undefined, warehouse_id: query.warehouse_id || undefined } })
+    const res = await api.get('/stock/query', { params: { ...query.value, category_id: query.value.category_id || undefined, status: query.value.status || undefined, warehouse_id: query.value.warehouse_id || undefined } })
     items.value = res.data.items
     total.value = res.data.total
   } finally { loading.value = false }
 }
 
-function reset() { query.keyword = ''; query.category_id = null; query.status = ''; query.warehouse_id = null; fetch() }
+function reset() { query.value.keyword = ''; query.value.category_id = null; query.value.status = null; query.value.warehouse_id = null; fetch() }
 
 function handleExport() { downloadCsv('/stock/records?format=csv') }
 

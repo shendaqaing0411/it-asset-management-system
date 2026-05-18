@@ -3,8 +3,8 @@
     <el-card>
       <el-form :inline="true" :model="query" size="small">
         <el-form-item label="关键字"><el-input v-model="query.keyword" placeholder="编号/名称/序列号" clearable /></el-form-item>
-        <el-form-item label="分类"><el-select v-model="query.category_id" clearable><el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" /></el-select></el-form-item>
-        <el-form-item label="状态"><el-select v-model="query.status" clearable><el-option label="在库" value="in_stock" /><el-option label="使用中" value="in_use" /><el-option label="借出" value="borrowed" /><el-option label="维修中" value="repairing" /><el-option label="已报废" value="scrapped" /></el-select></el-form-item>
+        <el-form-item label="分类"><el-select v-model="query.category_id" clearable style="width:160px"><el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" /></el-select></el-form-item>
+        <el-form-item label="状态"><el-select v-model="query.status" clearable style="width:140px"><el-option label="在库" value="in_stock" /><el-option label="使用中" value="in_use" /><el-option label="借出" value="borrowed" /><el-option label="维修中" value="repairing" /><el-option label="已报废" value="scrapped" /></el-select></el-form-item>
         <el-form-item><el-button type="primary" @click="fetch">查询</el-button><el-button @click="reset">重置</el-button><el-button type="success" @click="$router.push('/assets/form')">新增资产</el-button><el-button @click="showImport = true"><el-icon style="margin-right:4px"><Upload /></el-icon>批量导入</el-button><el-button @click="handleExport"><el-icon style="margin-right:4px"><Download /></el-icon>导出 Excel</el-button></el-form-item>
       </el-form>
       <el-table :data="items" stripe v-loading="loading">
@@ -21,7 +21,7 @@
         </el-table-column>
         <el-table-column prop="repair_count" label="维修次数" width="90">
           <template #default="{row}">
-            <el-button v-if="row.repair_count" link type="primary" @click="$router.push('/repairs?asset_id=' + row.id)">{{ row.repair_count }}</el-button>
+            <el-button v-if="row.repair_count" link type="primary" @click="$router.push('/repairs/list?asset_id=' + row.id)">{{ row.repair_count }}</el-button>
             <span v-else>0</span>
           </template>
         </el-table-column>
@@ -92,7 +92,7 @@
 
 <script setup>
 // 资产列表：多条件查询、分页展示、状态标签、二维码弹窗、删除确认、批量导入
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api, { downloadCsv } from '../../api'
 
@@ -100,7 +100,7 @@ const loading = ref(false)
 const items = ref([])
 const total = ref(0)
 const categories = ref([])
-const query = reactive({ keyword: '', category_id: null, status: '', page: 1 })
+const query = ref({ keyword: '', category_id: null, status: null, page: 1 })
 const qrVisible = ref(false)
 const qrSrc = ref('')
 const qrLabel = ref('')
@@ -122,13 +122,13 @@ function statusType(s) { return statusTypeMap[s] || '' }
 async function fetch() {
   loading.value = true
   try {
-    const res = await api.get('/assets', { params: { ...query, category_id: query.category_id || undefined, status: query.status || undefined } })
+    const res = await api.get('/assets', { params: { ...query.value, category_id: query.value.category_id || undefined, status: query.value.status || undefined } })
     items.value = res.data.items
     total.value = res.data.total
   } finally { loading.value = false }
 }
 
-function reset() { query.keyword = ''; query.category_id = null; query.status = ''; fetch() }
+function reset() { query.value.keyword = ''; query.value.category_id = null; query.value.status = null; fetch() }
 
 async function handleDelete(id) {
   await api.delete(`/assets/${id}`)
