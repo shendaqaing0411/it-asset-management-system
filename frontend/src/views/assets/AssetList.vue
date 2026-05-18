@@ -15,6 +15,16 @@
         <el-table-column prop="model" label="型号" width="120" />
         <el-table-column prop="serial_no" label="序列号" width="120" />
         <el-table-column prop="purchase_price" label="价格" width="100" />
+        <el-table-column prop="purchase_date" label="采购日期" width="110" />
+        <el-table-column prop="purchase_lifespan_years" label="使用年限" width="90">
+          <template #default="{row}">{{ row.purchase_lifespan_years ? row.purchase_lifespan_years + '年' : '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="repair_count" label="维修次数" width="90">
+          <template #default="{row}">
+            <el-button v-if="row.repair_count" link type="primary" @click="$router.push('/repairs?asset_id=' + row.id)">{{ row.repair_count }}</el-button>
+            <span v-else>0</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="80"><template #default="{row}"><el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
         <el-table-column prop="dept_name" label="使用部门" width="100" />
         <el-table-column prop="warehouse_name" label="仓库" width="80" />

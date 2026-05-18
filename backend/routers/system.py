@@ -21,17 +21,26 @@ def list_depts(user: dict = Depends(get_current_user)):
 
 @router.post("/departments")
 def create_dept(req: DeptCreate, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
     db.execute("INSERT INTO departments (name, parent_id, sort_order) VALUES (?,?,?)",
                (req.name, req.parent_id, req.sort_order))
     db.commit()
+    dept_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     db.close()
-    return Response(message="部门已添加").model_dump()
+    return Response(data={"id": dept_id}, message="部门已添加").model_dump()
 
 
 @router.put("/departments/{dept_id}")
 def update_dept(dept_id: int, req: DeptCreate, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
+    existing = db.execute("SELECT id FROM departments WHERE id = ?", (dept_id,)).fetchone()
+    if not existing:
+        db.close()
+        return Response(code=1, message="部门不存在").model_dump()
     db.execute("UPDATE departments SET name=?, parent_id=?, sort_order=? WHERE id=?",
                (req.name, req.parent_id, req.sort_order, dept_id))
     db.commit()
@@ -41,7 +50,17 @@ def update_dept(dept_id: int, req: DeptCreate, user: dict = Depends(get_current_
 
 @router.delete("/departments/{dept_id}")
 def delete_dept(dept_id: int, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
+    existing = db.execute("SELECT id FROM departments WHERE id = ?", (dept_id,)).fetchone()
+    if not existing:
+        db.close()
+        return Response(code=1, message="部门不存在").model_dump()
+    count = db.execute("SELECT COUNT(*) FROM assets WHERE dept_id = ?", (dept_id,)).fetchone()[0]
+    if count > 0:
+        db.close()
+        return Response(code=1, message=f"该部门下有 {count} 个资产，请先转移资产再删除").model_dump()
     db.execute("DELETE FROM departments WHERE id = ?", (dept_id,))
     db.commit()
     db.close()
@@ -50,26 +69,43 @@ def delete_dept(dept_id: int, user: dict = Depends(get_current_user)):
 
 # ---- 分类 ----
 @router.get("/categories")
-def list_categories(user: dict = Depends(get_current_user)):
+def list_categories(tree: bool = Query(False), user: dict = Depends(get_current_user)):
     db = get_db()
     rows = db.execute("SELECT * FROM categories ORDER BY sort_order").fetchall()
     db.close()
-    return Response(data=[dict(r) for r in rows]).model_dump()
+    data = [dict(r) for r in rows]
+    if tree:
+        result = []
+        for item in data:
+            if item["parent_id"] == 0:
+                item["children"] = [c for c in data if c["parent_id"] == item["id"]]
+                result.append(item)
+        return Response(data=result).model_dump()
+    return Response(data=data).model_dump()
 
 
 @router.post("/categories")
 def create_category(req: CategoryCreate, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
     db.execute("INSERT INTO categories (name, parent_id, sort_order) VALUES (?,?,?)",
                (req.name, req.parent_id, req.sort_order))
     db.commit()
+    cat_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     db.close()
-    return Response(message="分类已添加").model_dump()
+    return Response(data={"id": cat_id}, message="分类已添加").model_dump()
 
 
 @router.put("/categories/{cat_id}")
 def update_category(cat_id: int, req: CategoryCreate, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
+    existing = db.execute("SELECT id FROM categories WHERE id = ?", (cat_id,)).fetchone()
+    if not existing:
+        db.close()
+        return Response(code=1, message="分类不存在").model_dump()
     db.execute("UPDATE categories SET name=?, parent_id=?, sort_order=? WHERE id=?",
                (req.name, req.parent_id, req.sort_order, cat_id))
     db.commit()
@@ -79,7 +115,21 @@ def update_category(cat_id: int, req: CategoryCreate, user: dict = Depends(get_c
 
 @router.delete("/categories/{cat_id}")
 def delete_category(cat_id: int, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
+    existing = db.execute("SELECT id FROM categories WHERE id = ?", (cat_id,)).fetchone()
+    if not existing:
+        db.close()
+        return Response(code=1, message="分类不存在").model_dump()
+    # Check assets referencing this category or its children
+    count = db.execute(
+        "SELECT COUNT(*) FROM assets WHERE category_id = ? OR category_id IN (SELECT id FROM categories WHERE parent_id = ?)",
+        (cat_id, cat_id)
+    ).fetchone()[0]
+    if count > 0:
+        db.close()
+        return Response(code=1, message=f"该分类下有 {count} 个资产，请先转移资产再删除").model_dump()
     db.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
     db.commit()
     db.close()
@@ -97,17 +147,26 @@ def list_suppliers(user: dict = Depends(get_current_user)):
 
 @router.post("/suppliers")
 def create_supplier(req: SupplierCreate, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
     db.execute("INSERT INTO suppliers (name, contact, phone, address, remark) VALUES (?,?,?,?,?)",
                (req.name, req.contact, req.phone, req.address, req.remark))
     db.commit()
+    sup_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     db.close()
-    return Response(message="供应商已添加").model_dump()
+    return Response(data={"id": sup_id}, message="供应商已添加").model_dump()
 
 
 @router.put("/suppliers/{sup_id}")
 def update_supplier(sup_id: int, req: SupplierCreate, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
+    existing = db.execute("SELECT id FROM suppliers WHERE id = ?", (sup_id,)).fetchone()
+    if not existing:
+        db.close()
+        return Response(code=1, message="供应商不存在").model_dump()
     db.execute("UPDATE suppliers SET name=?, contact=?, phone=?, address=?, remark=? WHERE id=?",
                (req.name, req.contact, req.phone, req.address, req.remark, sup_id))
     db.commit()
@@ -117,7 +176,13 @@ def update_supplier(sup_id: int, req: SupplierCreate, user: dict = Depends(get_c
 
 @router.delete("/suppliers/{sup_id}")
 def delete_supplier(sup_id: int, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
+    existing = db.execute("SELECT id FROM suppliers WHERE id = ?", (sup_id,)).fetchone()
+    if not existing:
+        db.close()
+        return Response(code=1, message="供应商不存在").model_dump()
     db.execute("DELETE FROM suppliers WHERE id = ?", (sup_id,))
     db.commit()
     db.close()
@@ -135,17 +200,26 @@ def list_warehouses(user: dict = Depends(get_current_user)):
 
 @router.post("/warehouses")
 def create_warehouse(req: WarehouseCreate, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
     db.execute("INSERT INTO warehouses (name, location, manager_id) VALUES (?,?,?)",
                (req.name, req.location, req.manager_id))
     db.commit()
+    wh_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     db.close()
-    return Response(message="仓库已添加").model_dump()
+    return Response(data={"id": wh_id}, message="仓库已添加").model_dump()
 
 
 @router.put("/warehouses/{wh_id}")
 def update_warehouse(wh_id: int, req: WarehouseCreate, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
+    existing = db.execute("SELECT id FROM warehouses WHERE id = ?", (wh_id,)).fetchone()
+    if not existing:
+        db.close()
+        return Response(code=1, message="仓库不存在").model_dump()
     db.execute("UPDATE warehouses SET name=?, location=?, manager_id=? WHERE id=?",
                (req.name, req.location, req.manager_id, wh_id))
     db.commit()
@@ -155,7 +229,17 @@ def update_warehouse(wh_id: int, req: WarehouseCreate, user: dict = Depends(get_
 
 @router.delete("/warehouses/{wh_id}")
 def delete_warehouse(wh_id: int, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
+    existing = db.execute("SELECT id FROM warehouses WHERE id = ?", (wh_id,)).fetchone()
+    if not existing:
+        db.close()
+        return Response(code=1, message="仓库不存在").model_dump()
+    count = db.execute("SELECT COUNT(*) FROM assets WHERE warehouse_id = ?", (wh_id,)).fetchone()[0]
+    if count > 0:
+        db.close()
+        return Response(code=1, message=f"该仓库下有 {count} 个资产，请先转移资产再删除").model_dump()
     db.execute("DELETE FROM warehouses WHERE id = ?", (wh_id,))
     db.commit()
     db.close()
@@ -178,19 +262,28 @@ def list_warnings(user: dict = Depends(get_current_user)):
 
 @router.post("/warnings")
 def create_warning(req: WarningCreate, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
     db.execute(
         "INSERT INTO stock_warnings (warehouse_id, category_id, min_stock, max_stock) VALUES (?,?,?,?)",
         (req.warehouse_id, req.category_id, req.min_stock, req.max_stock)
     )
     db.commit()
+    warn_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     db.close()
-    return Response(message="预警规则已添加").model_dump()
+    return Response(data={"id": warn_id}, message="预警规则已添加").model_dump()
 
 
 @router.put("/warnings/{warn_id}")
 def update_warning(warn_id: int, req: WarningCreate, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
+    existing = db.execute("SELECT id FROM stock_warnings WHERE id = ?", (warn_id,)).fetchone()
+    if not existing:
+        db.close()
+        return Response(code=1, message="预警规则不存在").model_dump()
     db.execute(
         "UPDATE stock_warnings SET warehouse_id=?, category_id=?, min_stock=?, max_stock=? WHERE id=?",
         (req.warehouse_id, req.category_id, req.min_stock, req.max_stock, warn_id)
@@ -202,7 +295,13 @@ def update_warning(warn_id: int, req: WarningCreate, user: dict = Depends(get_cu
 
 @router.delete("/warnings/{warn_id}")
 def delete_warning(warn_id: int, user: dict = Depends(get_current_user)):
+    if user["role"] != "admin":
+        return Response(code=1, message="仅管理员可操作").model_dump()
     db = get_db()
+    existing = db.execute("SELECT id FROM stock_warnings WHERE id = ?", (warn_id,)).fetchone()
+    if not existing:
+        db.close()
+        return Response(code=1, message="预警规则不存在").model_dump()
     db.execute("DELETE FROM stock_warnings WHERE id = ?", (warn_id,))
     db.commit()
     db.close()

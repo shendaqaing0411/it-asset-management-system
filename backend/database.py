@@ -22,7 +22,7 @@ def init_db():
     """初始化数据库：建表 + 种子数据（仅首次运行）"""
     conn = get_db()
     cursor = conn.cursor()
-    # 共 9 张业务表
+    # 共 11 张业务表
     cursor.executescript('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,7 +136,34 @@ def init_db():
             description VARCHAR(500),
             create_time DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS dict_fields (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            module VARCHAR(50) NOT NULL,
+            field_key VARCHAR(50) NOT NULL,
+            field_name VARCHAR(100) NOT NULL,
+            field_type VARCHAR(20) DEFAULT 'text',
+            sort_order INTEGER DEFAULT 0,
+            is_required INTEGER DEFAULT 0,
+            options TEXT,
+            create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(module, field_key)
+        );
+
+        CREATE TABLE IF NOT EXISTS dict_values (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            field_id INTEGER NOT NULL,
+            record_id INTEGER NOT NULL,
+            value TEXT,
+            FOREIGN KEY (field_id) REFERENCES dict_fields(id) ON DELETE CASCADE,
+            UNIQUE(field_id, record_id)
+        );
     ''')
+    # 迁移：为已有数据库添加新字段（CREATE TABLE IF NOT EXISTS 不会修改已有表）
+    try:
+        cursor.execute("ALTER TABLE assets ADD COLUMN purchase_lifespan_years INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # 字段已存在
     conn.commit()
     _seed_data(conn)
     conn.close()

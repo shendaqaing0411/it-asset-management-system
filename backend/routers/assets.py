@@ -24,7 +24,8 @@ def _format_asset(row):
         "dept_id": row["dept_id"], "user_id": row["user_id"],
         "warehouse_id": row["warehouse_id"], "location": row["location"],
         "supplier_id": row["supplier_id"], "warranty_date": row["warranty_date"],
-        "remark": row["remark"], "create_time": row["create_time"], "update_time": row["update_time"]
+        "remark": row["remark"], "create_time": row["create_time"], "update_time": row["update_time"],
+        "purchase_lifespan_years": row["purchase_lifespan_years"] if "purchase_lifespan_years" in row.keys() else 0
     }
 
 
@@ -77,7 +78,8 @@ def list_assets(
     total = db.execute(f"SELECT COUNT(*) FROM assets a {where}", params).fetchone()[0]
     offset = (page - 1) * page_size
     rows = db.execute(
-        f"""SELECT a.*, c.name as category_name, d.name as dept_name, w.name as warehouse_name
+        f"""SELECT a.*, c.name as category_name, d.name as dept_name, w.name as warehouse_name,
+                  (SELECT COUNT(*) FROM repairs r WHERE r.asset_id = a.id) as repair_count
            FROM assets a
            LEFT JOIN categories c ON a.category_id = c.id
            LEFT JOIN departments d ON a.dept_id = d.id
@@ -91,9 +93,19 @@ def list_assets(
         item["category_name"] = r["category_name"]
         item["dept_name"] = r["dept_name"]
         item["warehouse_name"] = r["warehouse_name"]
+        item["repair_count"] = r["repair_count"]
         items.append(item)
     db.close()
     return Response(data={"total": total, "page": page, "page_size": page_size, "items": items}).model_dump()
+
+
+@router.get("/names")
+def get_asset_names(user: dict = Depends(get_current_user)):
+    """Return distinct asset names for autocomplete"""
+    db = get_db()
+    rows = db.execute("SELECT DISTINCT name FROM assets ORDER BY name").fetchall()
+    db.close()
+    return Response(data=[r["name"] for r in rows]).model_dump()
 
 
 @router.get("/{asset_id}")
@@ -109,15 +121,24 @@ def get_asset(asset_id: int, user: dict = Depends(get_current_user)):
 @router.post("")
 def create_asset(req: AssetCreate, user: dict = Depends(get_current_user)):
     db = get_db()
+    # 校验分类必须是二级类目
+    cat = db.execute("SELECT * FROM categories WHERE id = ?", (req.category_id,)).fetchone()
+    if not cat:
+        db.close()
+        return Response(code=1, message="分类不存在").model_dump()
+    if cat["parent_id"] == 0:
+        db.close()
+        return Response(code=1, message="资产必须登记在二级类目下，请选择具体子分类").model_dump()
     asset_no = _gen_asset_no(db)
     db.execute(
         """INSERT INTO assets (asset_no, name, category_id, brand, model, serial_no,
            purchase_price, purchase_date, dept_id, user_id, warehouse_id, location,
-           supplier_id, warranty_date, remark)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           supplier_id, warranty_date, remark, purchase_lifespan_years)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (asset_no, req.name, req.category_id, req.brand, req.model, req.serial_no,
          req.purchase_price, req.purchase_date, req.dept_id, req.user_id,
-         req.warehouse_id, req.location, req.supplier_id, req.warranty_date, req.remark)
+         req.warehouse_id, req.location, req.supplier_id, req.warranty_date, req.remark,
+         req.purchase_lifespan_years or 0)
     )
     db.commit()
     asset_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]

@@ -39,6 +39,7 @@
           <el-menu-item index="/system/warnings">库存预警</el-menu-item>
           <el-menu-item index="/system/logs">操作日志</el-menu-item>
           <el-menu-item index="/system/users">用户管理</el-menu-item>
+          <el-menu-item index="/system/dict">数据字典</el-menu-item>
         </el-sub-menu>
       </el-menu>
       <div class="sidebar-collapse" @click="collapsed = !collapsed">
@@ -88,7 +89,7 @@ const collapsed = ref(false)
 const activeMenu = computed(() => route.path)
 const openeds = ['assets', 'stock', 'repairs', 'reports', 'system']
 const pageTitle = computed(() => route.meta.title || '')
-const parentMap = { AssetList: '资产管理', AssetForm: '资产管理', CheckPlan: '资产管理', StockQuery: '库存管理', StockIn: '库存管理', StockOut: '库存管理', RepairList: '维保管理', ScrapList: '维保管理', StockReport: '报表统计', InoutReport: '报表统计', SummaryReport: '报表统计', Departments: '系统管理', Categories: '系统管理', Suppliers: '系统管理', Warehouses: '系统管理', Warnings: '系统管理', Logs: '系统管理', Users: '系统管理' }
+const parentMap = { AssetList: '资产管理', AssetForm: '资产管理', CheckPlan: '资产管理', StockQuery: '库存管理', StockIn: '库存管理', StockOut: '库存管理', RepairList: '维保管理', ScrapList: '维保管理', StockReport: '报表统计', InoutReport: '报表统计', SummaryReport: '报表统计', Departments: '系统管理', Categories: '系统管理', Suppliers: '系统管理', Warehouses: '系统管理', Warnings: '系统管理', Logs: '系统管理', Users: '系统管理', Dict: '系统管理' }
 const parentTitle = computed(() => parentMap[route.name] || '')
 
 function toggleFullscreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen() }

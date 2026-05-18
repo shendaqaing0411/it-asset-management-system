@@ -22,13 +22,26 @@ api.interceptors.response.use(
     return res.data
   },
   err => {
+    // 组件卸载时主动取消的请求，静默忽略不弹窗
+    if (axios.isCancel(err)) {
+      return Promise.reject(err)
+    }
     // 401 未登录：清除 token 并跳转登录页
+    // 注意：项目使用 Hash 模式路由，登录页路径为 /#/login
     if (err.response?.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      // 使用动态 import 避免循环依赖，通过 Vue Router 跳转而非硬刷新
+      import('../router/index.js').then(({ default: router }) => {
+        router.push('/login')
+      }).catch(() => {
+        // 兜底：router 加载失败时使用 location.href（Hash 模式正确路径）
+        window.location.href = '/#/login'
+      })
+      return Promise.reject(err)
     }
-    ElMessage.error(err.response?.data?.detail || '网络错误')
+    // 网络错误或服务器错误：仅对非 401、非取消类错误弹窗提示
+    ElMessage.error(err.response?.data?.detail || err.message || '网络错误')
     return Promise.reject(err)
   }
 )

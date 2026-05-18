@@ -30,10 +30,23 @@ def summary(user: dict = Depends(get_current_user)):
 @router.get("/stock")
 def stock_report(user: dict = Depends(get_current_user)):
     db = get_db()
+    # 按二级类目统计（含一级类目分组信息）
     by_category = db.execute(
-        """SELECT c.name, COUNT(*) as count, COALESCE(SUM(a.purchase_price), 0) as value
+        """SELECT c.id, c.name, c.parent_id, COUNT(*) as count, COALESCE(SUM(a.purchase_price), 0) as value
            FROM assets a LEFT JOIN categories c ON a.category_id = c.id
            GROUP BY a.category_id ORDER BY count DESC"""
+    ).fetchall()
+    # 按一级类目汇总（含子分类明细）
+    by_parent = db.execute(
+        """SELECT p.id as parent_id, p.name as parent_name,
+                  c.id as child_id, c.name as child_name,
+                  COUNT(a.id) as count, COALESCE(SUM(a.purchase_price), 0) as value
+           FROM categories c
+           LEFT JOIN categories p ON c.parent_id = p.id
+           LEFT JOIN assets a ON a.category_id = c.id
+           WHERE c.parent_id > 0
+           GROUP BY c.id
+           ORDER BY p.sort_order, c.sort_order"""
     ).fetchall()
     by_status = db.execute(
         "SELECT status, COUNT(*) as count FROM assets GROUP BY status"
@@ -42,10 +55,30 @@ def stock_report(user: dict = Depends(get_current_user)):
         "SELECT d.name, COUNT(*) as count FROM assets a LEFT JOIN departments d ON a.dept_id = d.id GROUP BY a.dept_id"
     ).fetchall()
     db.close()
+    # 构建二级类目树形统计
+    tree_data = []
+    parent_map = {}
+    for r in by_parent:
+        rdict = dict(r)
+        pid = rdict["parent_id"]
+        if pid not in parent_map:
+            parent_map[pid] = {
+                "name": rdict["parent_name"],
+                "id": pid,
+                "children": [],
+                "count": 0,
+                "value": 0
+            }
+            tree_data.append(parent_map[pid])
+        child = {"id": rdict["child_id"], "name": rdict["child_name"], "count": rdict["count"], "value": rdict["value"] or 0}
+        parent_map[pid]["children"].append(child)
+        parent_map[pid]["count"] += rdict["count"]
+        parent_map[pid]["value"] += rdict["value"] or 0
     return Response(data={
         "by_category": [dict(r) for r in by_category],
         "by_status": [dict(r) for r in by_status],
-        "by_dept": [dict(r) for r in by_dept]
+        "by_dept": [dict(r) for r in by_dept],
+        "by_sub_category": tree_data
     }).model_dump()
 
 

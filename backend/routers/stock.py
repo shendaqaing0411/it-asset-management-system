@@ -22,6 +22,7 @@ def _asset_row(db, asset_id: int):
 @router.get("/query")
 def query_stock(
     keyword: str = Query(None), category_id: int = Query(None),
+    parent_category_id: int = Query(None),
     status: str = Query(None), warehouse_id: int = Query(None),
     page: int = Query(1), page_size: int = Query(20),
     user: dict = Depends(get_current_user)
@@ -35,6 +36,9 @@ def query_stock(
     if category_id:
         conditions.append("a.category_id = ?")
         params.append(category_id)
+    if parent_category_id:
+        conditions.append("c.parent_id = ?")
+        params.append(parent_category_id)
     if status:
         conditions.append("a.status = ?")
         params.append(status)
@@ -42,7 +46,8 @@ def query_stock(
         conditions.append("a.warehouse_id = ?")
         params.append(warehouse_id)
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
-    total = db.execute(f"SELECT COUNT(*) FROM assets a {where}", params).fetchone()[0]
+    count_from = "FROM assets a LEFT JOIN categories c ON a.category_id = c.id" if parent_category_id else "FROM assets a"
+    total = db.execute(f"SELECT COUNT(*) {count_from} {where}", params).fetchone()[0]
     offset = (page - 1) * page_size
     rows = db.execute(
         f"""SELECT a.*, c.name as category_name, w.name as warehouse_name

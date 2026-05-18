@@ -14,10 +14,10 @@
     <!-- charts row -->
     <el-row :gutter="20" style="margin-top:20px">
       <el-col :span="14">
-        <el-card header="资产状态分布" shadow="never"><v-chart :option="statusChartOption" style="height:320px" autoresize /></el-card>
+        <el-card header="资产状态分布" shadow="never"><div ref="barChartRef" style="height:320px;width:100%"></div></el-card>
       </el-col>
       <el-col :span="10">
-        <el-card header="分类占比" shadow="never"><v-chart :option="categoryChartOption" style="height:320px" autoresize /></el-card>
+        <el-card header="分类占比" shadow="never"><div ref="pieChartRef" style="height:320px;width:100%"></div></el-card>
       </el-col>
     </el-row>
 
@@ -56,15 +56,14 @@
 
 <script setup>
 // 仪表盘：6 个统计卡片 + ECharts 柱状图（状态分布）+ 环形图（分类占比）+ 最近操作日志 + 库存预警
-import { ref, computed, onMounted } from 'vue'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { PieChart, BarChart } from 'echarts/charts'
-import { TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
+import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import * as echarts from 'echarts'
 import api from '../api'
 
-use([CanvasRenderer, PieChart, BarChart, TooltipComponent, LegendComponent, GridComponent])
+// ECharts 图表实例
+let barChart = null
+let pieChart = null
 
 const statCards = ref([
   { label: '资产总数', value: 0, color: '#5b7cfa', bg: '#eef1fe', icon: 'Monitor' },
@@ -74,13 +73,13 @@ const statCards = ref([
   { label: '借出', value: 0, color: '#909399', bg: '#f0f0f0', icon: 'Share' },
   { label: '已报废', value: 0, color: '#b0b3ba', bg: '#f5f5f5', icon: 'Delete' }
 ])
+const barChartRef = ref(null)
+const pieChartRef = ref(null)
 const recentLogs = ref([])
 const warnings = ref([])
-const statusData = ref({ in_stock: 0, in_use: 0, borrowed: 0, repairing: 0, scrapped: 0 })
-const categoryData = ref([])
 
-const statusChartOption = computed(() => ({
-  // ECharts 柱状图：按状态统计资产数量
+// 图表配置
+const statusChartOption = {
   tooltip: { trigger: 'axis' },
   grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
   xAxis: { type: 'category', data: ['在库', '使用中', '借出', '维修中', '已报废'], axisLine: { lineStyle: { color: '#ddd' } } },
@@ -88,26 +87,39 @@ const statusChartOption = computed(() => ({
   series: [{
     type: 'bar', barWidth: 32, itemStyle: { borderRadius: [6, 6, 0, 0] },
     data: [
-      { value: statusData.value.in_stock, itemStyle: { color: '#34c88d' } },
-      { value: statusData.value.in_use, itemStyle: { color: '#5b7cfa' } },
-      { value: statusData.value.borrowed, itemStyle: { color: '#f5a623' } },
-      { value: statusData.value.repairing, itemStyle: { color: '#f55858' } },
-      { value: statusData.value.scrapped, itemStyle: { color: '#b0b3ba' } }
+      { value: 0, itemStyle: { color: '#34c88d' } },
+      { value: 0, itemStyle: { color: '#5b7cfa' } },
+      { value: 0, itemStyle: { color: '#f5a623' } },
+      { value: 0, itemStyle: { color: '#f55858' } },
+      { value: 0, itemStyle: { color: '#b0b3ba' } }
     ]
   }]
-}))
+}
 
-const categoryChartOption = computed(() => ({
-  // ECharts 环形图：按分类统计资产占比
-  tooltip: { trigger: 'item' },
+const categoryChartOption = {
+  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+  legend: { orient: 'vertical', left: 'left', top: 'center' },
   series: [{
-    type: 'pie', radius: ['50%', '75%'], center: ['50%', '50%'], itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 3 },
+    type: 'pie', radius: ['45%', '70%'], center: ['55%', '50%'],
+    itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 3 },
     label: { show: true, formatter: '{b}\n{d}%' },
-    data: categoryData.value.map((c, i) => ({ name: c.name, value: c.count, itemStyle: { color: ['#5b7cfa','#34c88d','#f5a623','#f55858','#909399'][i % 5] } }))
+    emphasis: { label: { fontSize: 16, fontWeight: 'bold' } },
+    data: [{ name: '暂无数据', value: 1, itemStyle: { color: '#e0e0e0' } }]
   }]
-}))
+}
 
 onMounted(async () => {
+  // 初始化图表
+  if (barChartRef.value) {
+    barChart = echarts.init(barChartRef.value)
+    barChart.setOption(statusChartOption)
+  }
+  if (pieChartRef.value) {
+    pieChart = echarts.init(pieChartRef.value)
+    pieChart.setOption(categoryChartOption)
+  }
+  
+  // 加载数据
   try {
     const [s, l, stock] = await Promise.all([
       api.get('/report/summary'),
@@ -122,13 +134,40 @@ onMounted(async () => {
     statCards.value[4].value = d.borrowed || 0
     statCards.value[5].value = d.scrapped || 0
     recentLogs.value = l.data.items
-    statusData.value = { in_stock: d.in_stock, in_use: d.in_use || 0, borrowed: d.borrowed || 0, repairing: d.repairing || 0, scrapped: d.scrapped || 0 }
-    categoryData.value = stock.data.by_category || []
+    
+    // 更新图表数据
+    if (barChart) {
+      barChart.setOption({
+        series: [{
+          data: [
+            { value: d.in_stock, itemStyle: { color: '#34c88d' } },
+            { value: d.in_use || 0, itemStyle: { color: '#5b7cfa' } },
+            { value: d.borrowed || 0, itemStyle: { color: '#f5a623' } },
+            { value: d.repairing || 0, itemStyle: { color: '#f55858' } },
+            { value: d.scrapped || 0, itemStyle: { color: '#b0b3ba' } }
+          ]
+        }]
+      })
+    }
+    
+    const items = stock.data.by_category || []
+    if (pieChart) {
+      pieChart.setOption({
+        series: [{
+          data: items.length > 0
+            ? items.map((c, i) => ({ name: c.name, value: c.count, itemStyle: { color: ['#5b7cfa','#34c88d','#f5a623','#f55858','#909399'][i % 5] } }))
+            : [{ name: '暂无数据', value: 1, itemStyle: { color: '#e0e0e0' } }]
+        }]
+      })
+    }
+    
     try {
       const w = await api.get('/stock/warnings')
       warnings.value = w.data.filter(x => x.warning)
     } catch {}
-  } catch {}
+  } catch (e) {
+    ElMessage.error('仪表盘数据加载失败')
+  }
 })
 </script>
 

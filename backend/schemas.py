@@ -3,14 +3,14 @@
 # 所有响应通过 Response 统一封装 code/data/message
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Union
 from datetime import date, datetime
 
 
 # ---- 通用 ----
 class Response(BaseModel):
     code: int = 0
-    data: Optional[dict | list] = None
+    data: Optional[Union[dict, list]] = None
     message: str = "ok"
 
 
@@ -43,6 +43,7 @@ class AssetCreate(BaseModel):
     supplier_id: Optional[int] = None
     warranty_date: Optional[date] = None
     remark: Optional[str] = None
+    purchase_lifespan_years: Optional[int] = Field(default=0, ge=0)
 
 
 class AssetUpdate(BaseModel):
@@ -60,6 +61,7 @@ class AssetUpdate(BaseModel):
     supplier_id: Optional[int] = None
     warranty_date: Optional[date] = None
     remark: Optional[str] = None
+    purchase_lifespan_years: Optional[int] = Field(default=None, ge=0)
 
 
 # ---- 库存 ----

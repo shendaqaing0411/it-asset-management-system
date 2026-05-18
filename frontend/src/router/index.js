@@ -33,7 +33,8 @@ const routes = [
       { path: 'system/warehouses', name: 'Warehouses', component: () => import('../views/system/Warehouses.vue'), meta: { title: '仓库管理' } },
       { path: 'system/warnings', name: 'Warnings', component: () => import('../views/system/Warnings.vue'), meta: { title: '库存预警' } },
       { path: 'system/logs', name: 'Logs', component: () => import('../views/system/Logs.vue'), meta: { title: '操作日志' } },
-      { path: 'system/users', name: 'Users', component: () => import('../views/system/Users.vue'), meta: { title: '用户管理' } }
+      { path: 'system/users', name: 'Users', component: () => import('../views/system/Users.vue'), meta: { title: '用户管理' } },
+      { path: 'system/dict', name: 'Dict', component: () => import('../views/system/Dict.vue'), meta: { title: '数据字典' } }
     ]
   }
 ]
