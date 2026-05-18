@@ -28,6 +28,7 @@
         <el-table-column prop="status" label="状态" width="80"><template #default="{row}"><el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
         <el-table-column prop="dept_name" label="使用部门" width="100" />
         <el-table-column prop="warehouse_name" label="仓库" width="80" />
+        <el-table-column prop="remark" label="备注" width="120" show-overflow-tooltip />
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{row}">
             <el-button link type="primary" @click="$router.push(`/assets/form/${row.id}`)">编辑</el-button>
@@ -93,7 +94,7 @@
 // 资产列表：多条件查询、分页展示、状态标签、二维码弹窗、删除确认、批量导入
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import api from '../../api'
+import api, { downloadCsv } from '../../api'
 
 const loading = ref(false)
 const items = ref([])
@@ -168,7 +169,7 @@ async function doImport() {
   } finally { importing.value = false }
 }
 
-function handleExport() { window.open('/api/assets?format=csv', '_blank') }
+function handleExport() { downloadCsv('/assets?format=csv') }
 
 onMounted(async () => {
   const res = await api.get('/categories')

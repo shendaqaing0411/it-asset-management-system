@@ -60,7 +60,7 @@
 
 <script setup>
 import { ref, computed, reactive, onMounted } from 'vue'
-import api from '../../api'
+import api, { downloadCsv } from '../../api'
 import { ElMessage } from 'element-plus'
 
 const user = JSON.parse(localStorage.getItem('user') || '{}')
@@ -152,7 +152,7 @@ async function handleDeliver(row) {
   } finally { saving.value = false }
 }
 
-function handleExport() { window.open('/api/approvals?format=csv', '_blank') }
+function handleExport() { downloadCsv('/approvals?format=csv') }
 
 onMounted(() => fetch())
 </script>

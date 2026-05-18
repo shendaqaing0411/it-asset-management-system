@@ -3,6 +3,8 @@
 
 import io
 import csv
+import random
+import string
 from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
@@ -94,15 +96,18 @@ def list_assets(
         db.close()
         output = io.StringIO()
         writer = csv.writer(output)
+        status_map = {"in_stock": "在库", "in_use": "使用中", "borrowed": "借出", "repairing": "维修中", "scrapped": "已报废"}
         writer.writerow(["资产编号", "名称", "分类", "品牌", "型号", "序列号", "采购价格", "采购日期",
                           "状态", "部门", "仓库", "存放位置", "保修到期", "备注"])
         for r in rows:
             writer.writerow([r["asset_no"], r["name"], r["category_name"], r["brand"], r["model"],
-                             r["serial_no"], r["purchase_price"], r["purchase_date"], r["status"],
+                             r["serial_no"], r["purchase_price"], r["purchase_date"],
+                             status_map.get(r["status"], r["status"]),
                              r["dept_name"], r["warehouse_name"], r["location"], r["warranty_date"], r["remark"]])
         output.seek(0)
+        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
         return StreamingResponse(iter([output.getvalue()]), media_type="text/csv; charset=utf-8",
-                                 headers={"Content-Disposition": "attachment; filename=assets.csv"})
+                                 headers={"Content-Disposition": f"attachment; filename=assets_{suffix}.csv"})
 
     total = db.execute(f"SELECT COUNT(*) FROM assets a {where}", params).fetchone()[0]
     offset = (page - 1) * page_size
@@ -269,28 +274,40 @@ def delete_asset(asset_id: int, user: dict = Depends(get_current_user)):
 
 @router.post("/calculate-depreciation")
 def calculate_depreciation(user: dict = Depends(get_current_user)):
-    """遍历所有 in_stock/in_use 资产，计算折旧"""
+    """遍历所有 in_stock/in_use 资产，按分类配置计算折旧"""
     db = get_db()
     rows = db.execute(
         "SELECT * FROM assets WHERE status IN ('in_stock','in_use')"
     ).fetchall()
+    # 加载所有分类折旧配置
+    configs = {}
+    config_rows = db.execute("SELECT * FROM depreciation_configs").fetchall()
+    for c in config_rows:
+        configs[c["category_id"]] = c
     updated = 0
     for a in rows:
-        method = a["depreciation_method"] if "depreciation_method" in a.keys() and a["depreciation_method"] else "straight"
-        price = a["purchase_price"] or 0
-        lifespan = a["purchase_lifespan_years"] if "purchase_lifespan_years" in a.keys() and a["purchase_lifespan_years"] else 0
+        cfg = configs.get(a["category_id"])
+        method = cfg["method"] if cfg else (
+            a["depreciation_method"] if "depreciation_method" in a.keys() and a["depreciation_method"] else "straight"
+        )
+        lifespan = cfg["useful_life_years"] if cfg and cfg["useful_life_years"] else (
+            a["purchase_lifespan_years"] if "purchase_lifespan_years" in a.keys() and a["purchase_lifespan_years"] else 0
+        )
+        salvage_rate = float(cfg["salvage_rate"] or 0) if cfg else 0
+        price = float(a["purchase_price"] or 0)
         if method == "once":
             monthly = float(price)
             accumulated = float(price)
             net = 0
         elif lifespan > 0:
-            monthly = price / (lifespan * 12)
+            depreciable = price * (1 - salvage_rate)
+            monthly = depreciable / (lifespan * 12)
             accumulated = float(a["accumulated_depreciation"] or 0) + monthly if "accumulated_depreciation" in a.keys() else monthly
             net = max(price - accumulated, 0)
         else:
             monthly = 0
             accumulated = float(a["accumulated_depreciation"] or 0) if "accumulated_depreciation" in a.keys() else 0
-            net = price
+            net = max(price - accumulated, 0)
         db.execute(
             "UPDATE assets SET monthly_depreciation=?, accumulated_depreciation=?, net_value=? WHERE id=?",
             (round(monthly, 2), round(accumulated, 2), round(net, 2), a["id"])

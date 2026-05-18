@@ -2,6 +2,8 @@
 
 import io
 import csv
+import random
+import string
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from database import get_db
@@ -122,39 +124,67 @@ def inout_report(
 
 @router.get("/depreciation")
 def depreciation_report(format: str = Query(None), user: dict = Depends(get_current_user)):
-    """折旧报表：列出所有资产折旧状态及汇总"""
+    """折旧报表：列出所有资产折旧状态及汇总，按分类分组"""
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM assets ORDER BY id DESC"
+        """SELECT a.*, c.name as category_name,
+                  (SELECT name FROM categories WHERE id = c.parent_id) as parent_name
+           FROM assets a
+           LEFT JOIN categories c ON a.category_id = c.id
+           ORDER BY c.parent_id, a.category_id, a.id DESC"""
     ).fetchall()
     items = []
+    category_summary = {}  # 按二级分类汇总
     for a in rows:
         method = a["depreciation_method"] if "depreciation_method" in a.keys() and a["depreciation_method"] else "straight"
         accumulated = float(a["accumulated_depreciation"] or 0) if "accumulated_depreciation" in a.keys() else 0
         net = float(a["net_value"] or 0) if "net_value" in a.keys() else 0
         price = float(a["purchase_price"] or 0)
+        monthly = float(a["monthly_depreciation"] or 0) if "monthly_depreciation" in a.keys() else 0
+        cat_name = a["category_name"] or "未分类"
+        parent_name = a["parent_name"] or ""
         items.append({
             "asset_no": a["asset_no"],
             "name": a["name"],
+            "category_name": cat_name,
+            "parent_name": parent_name,
             "purchase_price": price,
+            "monthly_depreciation": round(monthly, 2),
             "accumulated_depreciation": round(accumulated, 2),
             "net_value": round(net, 2),
             "method": method,
             "status": "已折旧" if accumulated >= price and price > 0 else ("折旧中" if accumulated > 0 else "未折旧")
         })
+        # 按二级分类汇总
+        key = cat_name if not parent_name else f"{parent_name} > {cat_name}"
+        if key not in category_summary:
+            category_summary[key] = {"original": 0, "depreciation": 0, "net": 0, "count": 0}
+        category_summary[key]["original"] += price
+        category_summary[key]["depreciation"] += accumulated
+        category_summary[key]["net"] += net
+        category_summary[key]["count"] += 1
 
     if format == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["资产编号", "名称", "原值", "累计折旧", "净值", "折旧方法", "状态"])
+        method_map = {"straight": "直线法", "once": "一次性"}
+        writer.writerow(["资产编号", "名称", "分类", "原值", "月折旧额", "累计折旧", "净值", "折旧方法", "状态"])
         for item in items:
-            writer.writerow([item["asset_no"], item["name"], item["purchase_price"],
+            writer.writerow([item["asset_no"], item["name"], item["category_name"],
+                             item["purchase_price"], item["monthly_depreciation"],
                              item["accumulated_depreciation"], item["net_value"],
-                             item["method"], item["status"]])
+                             method_map.get(item["method"], item["method"]), item["status"]])
+        # 分类汇总
+        writer.writerow([])
+        writer.writerow(["分类汇总", "", "", "原值合计", "累计折旧合计", "净值合计", "资产数量"])
+        for cat, v in category_summary.items():
+            writer.writerow([cat, "", "", round(v["original"], 2), round(v["depreciation"], 2),
+                             round(v["net"], 2), v["count"]])
         output.seek(0)
         db.close()
+        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
         return StreamingResponse(iter([output.getvalue()]), media_type="text/csv; charset=utf-8",
-                                 headers={"Content-Disposition": "attachment; filename=depreciation.csv"})
+                                 headers={"Content-Disposition": f"attachment; filename=depreciation_{suffix}.csv"})
 
     total_original = sum(it["purchase_price"] for it in items)
     total_depreciation = sum(it["accumulated_depreciation"] for it in items)
@@ -166,5 +196,6 @@ def depreciation_report(format: str = Query(None), user: dict = Depends(get_curr
             "total_original": round(total_original, 2),
             "total_depreciation": round(total_depreciation, 2),
             "total_net": round(total_net, 2)
-        }
+        },
+        "category_summary": [{"category": k, **v} for k, v in category_summary.items()]
     }).model_dump()

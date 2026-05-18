@@ -27,7 +27,7 @@
 <script setup>
 // 出库管理：只搜索在库资产，支持领用出库和借用出库，选择使用部门
 import { ref, reactive, onMounted } from 'vue'
-import api from '../../api'
+import api, { downloadCsv } from '../../api'
 import { ElMessage } from 'element-plus'
 
 const formRef = ref(null)
@@ -59,7 +59,7 @@ async function loadRecords() {
   records.value = res.data.items
 }
 
-function handleExport() { window.open('/api/stock/records?format=csv', '_blank') }
+function handleExport() { downloadCsv('/stock/records?format=csv') }
 
 onMounted(async () => {
   const d = await api.get('/departments'); depts.value = d.data

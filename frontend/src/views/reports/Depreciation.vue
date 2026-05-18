@@ -24,11 +24,30 @@
       <el-button @click="handleExport">导出 Excel</el-button>
     </div>
 
-    <!-- 表格 -->
+    <!-- 分类汇总表 -->
+    <el-card v-if="categorySummary.length" shadow="never" style="margin-bottom:16px">
+      <template #header><span style="font-weight:600">分类汇总</span></template>
+      <el-table :data="categorySummary" stripe size="small">
+        <el-table-column prop="category" label="资产分类" />
+        <el-table-column label="原值合计" width="140">
+          <template #default="{row}">¥{{ fmt(row.original) }}</template>
+        </el-table-column>
+        <el-table-column label="累计折旧" width="140">
+          <template #default="{row}">¥{{ fmt(row.depreciation) }}</template>
+        </el-table-column>
+        <el-table-column label="净值合计" width="140">
+          <template #default="{row}">¥{{ fmt(row.net) }}</template>
+        </el-table-column>
+        <el-table-column prop="count" label="数量" width="80" />
+      </el-table>
+    </el-card>
+
+    <!-- 资产明细表格 -->
     <el-card shadow="never">
       <el-table :data="items" stripe>
         <el-table-column prop="asset_no" label="资产编号" width="140" />
         <el-table-column prop="name" label="资产名称" show-overflow-tooltip />
+        <el-table-column prop="category_name" label="分类" width="120" show-overflow-tooltip />
         <el-table-column label="原值" width="120">
           <template #default="{row}">{{ row.purchase_price ? '¥' + fmt(row.purchase_price) : '-' }}</template>
         </el-table-column>
@@ -54,12 +73,13 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import api from '../../api'
+import api, { downloadCsv } from '../../api'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
 const calculating = ref(false)
 const items = ref([])
+const categorySummary = ref([])
 const summary = reactive({ total_original: 0, total_depreciation: 0, total_net: 0 })
 
 function fmt(n) { return n ? Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00' }
@@ -67,8 +87,9 @@ function fmt(n) { return n ? Number(n).toLocaleString('en-US', { minimumFraction
 async function fetch() {
   loading.value = true
   try {
-    const res = await api.get('/reports/depreciation')
+    const res = await api.get('/report/depreciation')
     items.value = res.data.items || []
+    categorySummary.value = res.data.category_summary || []
     if (res.data.summary) Object.assign(summary, res.data.summary)
   } finally { loading.value = false }
 }
@@ -83,7 +104,7 @@ async function handleCalculate() {
 }
 
 function handleExport() {
-  window.open('/api/reports/depreciation?format=csv', '_blank')
+  downloadCsv('/report/depreciation?format=csv')
 }
 
 onMounted(() => fetch())

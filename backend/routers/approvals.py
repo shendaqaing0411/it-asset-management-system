@@ -1,7 +1,12 @@
 # 领用审批路由：提交申请、列表查询（按角色过滤）、审批、确认出库
 
+import io
+import csv
+import random
+import string
 from datetime import date
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from database import get_db
 from auth import get_current_user
 from schemas import ApprovalCreate, ApprovalApprove, Response
@@ -17,6 +22,7 @@ def _log(db, user_id: int, desc: str):
 @router.get("")
 def list_approvals(
     status: str = Query(None),
+    format: str = Query(None),
     page: int = Query(1), page_size: int = Query(20),
     user: dict = Depends(get_current_user)
 ):
@@ -36,6 +42,34 @@ def list_approvals(
             conditions.append("ap.dept_id = ?")
             params.append(user.get("dept_id", 0))
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    if format == "csv":
+        all_rows = db.execute(
+            f"""SELECT ap.*, a.asset_no, a.name as asset_name,
+                       u1.real_name as applicant_name, u2.real_name as approver_name,
+                       d.name as dept_name
+                FROM approvals ap
+                LEFT JOIN assets a ON ap.asset_id = a.id
+                LEFT JOIN users u1 ON ap.applicant_id = u1.id
+                LEFT JOIN users u2 ON ap.approver_id = u2.id
+                LEFT JOIN departments d ON ap.dept_id = d.id
+                {where} ORDER BY ap.id DESC""",
+            params
+        ).fetchall()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        status_map = {"pending": "待审批", "approved": "已通过", "rejected": "已拒绝", "delivered": "已出库"}
+        writer.writerow(["资产编号", "资产名称", "申请人", "申请部门", "申请原因", "申请日期", "状态", "审批人", "审批日期", "出库日期"])
+        for r in all_rows:
+            writer.writerow([r["asset_no"], r["asset_name"], r["applicant_name"] or "", r["dept_name"] or "",
+                             r["apply_reason"] or "", r["apply_date"], status_map.get(r["status"], r["status"]),
+                             r["approver_name"] or "", r["approve_date"] or "", r["deliver_date"] or ""])
+        output.seek(0)
+        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+        db.close()
+        return StreamingResponse(iter([output.getvalue()]), media_type="text/csv; charset=utf-8",
+                                 headers={"Content-Disposition": f"attachment; filename=approvals_{suffix}.csv"})
+
     total = db.execute(f"SELECT COUNT(*) FROM approvals ap {where}", params).fetchone()[0]
     offset = (page - 1) * page_size
     rows = db.execute(

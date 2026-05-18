@@ -1,8 +1,13 @@
 # 库存管理路由：出入库、归还、调拨、库存查询、预警监测
 # 出入库同时更新 assets 表状态与 stock_records 表记录
 
+import io
+import csv
+import random
+import string
 from datetime import date
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from database import get_db
 from auth import get_current_user
 from schemas import StockInReq, StockOutReq, StockTransferReq, CheckReq, Response
@@ -168,6 +173,7 @@ def transfer(req: StockTransferReq, user: dict = Depends(get_current_user)):
 @router.get("/records")
 def stock_records(
     asset_id: int = Query(None), type: str = Query(None),
+    format: str = Query(None),
     page: int = Query(1), page_size: int = Query(20),
     user: dict = Depends(get_current_user)
 ):
@@ -181,6 +187,26 @@ def stock_records(
         conditions.append("s.type = ?")
         params.append(type)
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    if format == "csv":
+        all_rows = db.execute(
+            f"""SELECT s.*, a.asset_no, a.name as asset_name
+               FROM stock_records s LEFT JOIN assets a ON s.asset_id = a.id
+               {where} ORDER BY s.id DESC""",
+            params
+        ).fetchall()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["资产编号", "资产名称", "操作类型", "数量", "来源/去向部门", "操作人", "操作日期", "备注"])
+        for r in all_rows:
+            writer.writerow([r["asset_no"], r["asset_name"], r["type"], r["quantity"],
+                             r["to_dept_id"] or "", r["operator_id"], r["operate_date"], r["remark"] or ""])
+        output.seek(0)
+        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+        db.close()
+        return StreamingResponse(iter([output.getvalue()]), media_type="text/csv; charset=utf-8",
+                                 headers={"Content-Disposition": f"attachment; filename=stock_records_{suffix}.csv"})
+
     total = db.execute(f"SELECT COUNT(*) FROM stock_records s {where}", params).fetchone()[0]
     offset = (page - 1) * page_size
     rows = db.execute(

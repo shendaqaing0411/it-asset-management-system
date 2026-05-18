@@ -37,7 +37,8 @@ const routes = [
       { path: 'system/warnings', name: 'Warnings', component: () => import('../views/system/Warnings.vue'), meta: { title: '库存预警' } },
       { path: 'system/logs', name: 'Logs', component: () => import('../views/system/Logs.vue'), meta: { title: '操作日志' } },
       { path: 'system/users', name: 'Users', component: () => import('../views/system/Users.vue'), meta: { title: '用户管理' } },
-      { path: 'system/dict', name: 'Dict', component: () => import('../views/system/Dict.vue'), meta: { title: '数据字典' } }
+      { path: 'system/dict', name: 'Dict', component: () => import('../views/system/Dict.vue'), meta: { title: '数据字典' } },
+      { path: 'system/depreciation-config', name: 'DepreciationConfig', component: () => import('../views/system/DepreciationConfig.vue'), meta: { title: '折旧配置' } }
     ]
   }
 ]

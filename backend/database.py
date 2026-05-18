@@ -215,6 +215,22 @@ def init_db():
             cursor.execute(m)
         except sqlite3.OperationalError:
             pass  # 字段/表已存在
+    # 折旧配置表
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS depreciation_configs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_id INTEGER UNIQUE NOT NULL,
+                method VARCHAR(20) DEFAULT 'straight',
+                useful_life_years INTEGER DEFAULT 5,
+                salvage_rate DECIMAL(5,4) DEFAULT 0,
+                create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (category_id) REFERENCES categories(id)
+            );
+        ''')
+    except sqlite3.OperationalError:
+        pass
     # 将已有 admin 的 role 从 'admin' 更新为 'super_admin'
     try:
         cursor.execute("UPDATE users SET role = 'super_admin' WHERE role = 'admin'")

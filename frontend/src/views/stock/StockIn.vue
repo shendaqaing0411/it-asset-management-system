@@ -28,7 +28,7 @@
 <script setup>
 // 入库管理：远程搜索资产、选择入库类型和目标仓库、展示最近入库记录
 import { ref, reactive, onMounted } from 'vue'
-import api from '../../api'
+import api, { downloadCsv } from '../../api'
 import { ElMessage } from 'element-plus'
 
 const formRef = ref(null)
@@ -60,7 +60,7 @@ async function loadRecords() {
   records.value = res.data.items
 }
 
-function handleExport() { window.open('/api/stock/records?format=csv', '_blank') }
+function handleExport() { downloadCsv('/stock/records?format=csv') }
 
 onMounted(async () => {
   const w = await api.get('/warehouses'); warehouses.value = w.data

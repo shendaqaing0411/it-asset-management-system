@@ -56,7 +56,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import api from '../../api'
+import api, { downloadCsv } from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const loading = ref(false)
@@ -116,7 +116,7 @@ async function handleReturn(row) {
   } catch { /* cancelled */ }
 }
 
-function handleExport() { window.open('/api/repairs?format=csv', '_blank') }
+function handleExport() { downloadCsv('/repairs?format=csv') }
 
 onMounted(() => fetch())
 </script>

@@ -1,8 +1,13 @@
 # 报废管理路由：独立 scraps 表 CRUD
 # 创建报废时校验资产存在、scrap_reason 必填、自然老化时 aging_match 必填
 
+import io
+import csv
+import random
+import string
 from datetime import date
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from database import get_db
 from auth import get_current_user
 from schemas import ScrapCreate, Response
@@ -17,6 +22,7 @@ def _log(db, user_id: int, desc: str):
 
 @router.get("")
 def list_scraps(
+    format: str = Query(None),
     page: int = Query(1), page_size: int = Query(20),
     user: dict = Depends(get_current_user)
 ):
@@ -29,6 +35,26 @@ def list_scraps(
            ORDER BY s.id DESC LIMIT ? OFFSET ?""",
         (page_size, offset)
     ).fetchall()
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["资产编号", "资产名称", "报废原因", "年限匹配", "责任人", "报废日期", "备注", "操作人"])
+        all_rows = db.execute(
+            """SELECT s.*, a.asset_no, a.name as asset_name
+               FROM scraps s LEFT JOIN assets a ON s.asset_id = a.id
+               ORDER BY s.id DESC"""
+        ).fetchall()
+        for r in all_rows:
+            writer.writerow([r["asset_no"], r["asset_name"], r["scrap_reason"],
+                             "是" if r["aging_match"] else "否", r["damage_responsible"] or "",
+                             r["scrap_date"], r["remark"] or "", r["operator_id"]])
+        output.seek(0)
+        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+        db.close()
+        return StreamingResponse(iter([output.getvalue()]), media_type="text/csv; charset=utf-8",
+                                 headers={"Content-Disposition": f"attachment; filename=scraps_{suffix}.csv"})
+
     db.close()
     return Response(data={"total": total, "page": page, "page_size": page_size, "items": [dict(r) for r in rows]}).model_dump()
 

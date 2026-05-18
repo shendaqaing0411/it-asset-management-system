@@ -2,8 +2,13 @@
 # repair_type 校验枚举值：保修期内维修/保外维修/厂商送修/自行维修
 # 维修完成 ≠ 返修入库，只有 POST /api/repairs/{id}/return 才恢复资产状态
 
+import io
+import csv
+import random
+import string
 from datetime import date
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from database import get_db
 from auth import get_current_user
 from schemas import RepairCreate, RepairUpdate, RepairReturnReq, Response
@@ -19,7 +24,7 @@ def _log(db, user_id: int, desc: str):
 
 
 @router.get("/repairs")
-def list_repairs(page: int = Query(1), page_size: int = Query(20), user: dict = Depends(get_current_user)):
+def list_repairs(format: str = Query(None), page: int = Query(1), page_size: int = Query(20), user: dict = Depends(get_current_user)):
     db = get_db()
     total = db.execute("SELECT COUNT(*) FROM repairs").fetchone()[0]
     offset = (page - 1) * page_size
@@ -29,6 +34,28 @@ def list_repairs(page: int = Query(1), page_size: int = Query(20), user: dict = 
            ORDER BY r.id DESC LIMIT ? OFFSET ?""",
         (page_size, offset)
     ).fetchall()
+
+    if format == "csv":
+        all_rows = db.execute(
+            """SELECT r.*, a.asset_no, a.name as asset_name
+               FROM repairs r LEFT JOIN assets a ON r.asset_id = a.id
+               ORDER BY r.id DESC"""
+        ).fetchall()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        status_map = {"pending": "待处理", "fixing": "维修中", "finished": "已完成"}
+        writer.writerow(["资产编号", "资产名称", "维修类型", "维修方式", "故障描述", "维修状态", "送修日期", "完成日期", "返修日期", "返修确认", "费用"])
+        for r in all_rows:
+            writer.writerow([r["asset_no"], r["asset_name"], r["repair_type"] or "", r["repair_method"] or "",
+                             r["fault_desc"] or "", status_map.get(r["status"], r["status"]),
+                             r["repair_date"] or "", r["finish_date"] or "",
+                             r["return_date"] or "", "是" if r["return_confirmed"] else "否", r["repair_cost"] or ""])
+        output.seek(0)
+        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+        db.close()
+        return StreamingResponse(iter([output.getvalue()]), media_type="text/csv; charset=utf-8",
+                                 headers={"Content-Disposition": f"attachment; filename=repairs_{suffix}.csv"})
+
     db.close()
     return Response(data={"total": total, "page": page, "page_size": page_size, "items": [dict(r) for r in rows]}).model_dump()
 

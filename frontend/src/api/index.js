@@ -46,4 +46,23 @@ api.interceptors.response.use(
   }
 )
 
+// 认证 CSV 下载：用 axios 发起请求（自动携带 token），触发浏览器下载
+export function downloadCsv(url, filename) {
+  api.get(url, { responseType: 'blob' }).then(res => {
+    const blob = res instanceof Blob ? res : new Blob([res], { type: 'text/csv;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    // 从 Content-Disposition 头提取文件名，或使用传入的 filename
+    const disposition = res.headers?.['content-disposition'] || (res.headers?.get?.('content-disposition') || '')
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+    link.download = match ? match[1].replace(/['"]/g, '') : (filename || 'export.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+  }).catch(() => {
+    // 错误由拦截器统一处理
+  })
+}
+
 export default api

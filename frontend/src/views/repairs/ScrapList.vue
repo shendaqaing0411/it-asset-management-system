@@ -51,7 +51,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import api from '../../api'
+import api, { downloadCsv } from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const loading = ref(false)
@@ -123,7 +123,7 @@ async function handleScrap() {
   } finally { saving.value = false }
 }
 
-function handleExport() { window.open('/api/scraps?format=csv', '_blank') }
+function handleExport() { downloadCsv('/scraps?format=csv') }
 
 onMounted(() => fetch())
 </script>

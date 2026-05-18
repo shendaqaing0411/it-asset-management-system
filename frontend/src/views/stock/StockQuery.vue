@@ -14,6 +14,7 @@
       <el-table-column prop="status" label="状态" width="80"><template #default="{row}"><el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
       <el-table-column prop="warehouse_name" label="仓库" width="100" />
       <el-table-column prop="location" label="位置" width="100" />
+      <el-table-column prop="remark" label="备注" width="120" show-overflow-tooltip />
       <el-table-column label="操作" width="180">
         <template #default="{row}">
           <el-button link type="primary" @click="handleAction(row, 'in')" v-if="row.status !== 'in_stock'">入库</el-button>
@@ -30,7 +31,7 @@
 <script setup>
 // 库存查询：多维筛选（关键字/分类/状态/仓库），行内快捷操作（入库/出库/归还/报废）
 import { ref, reactive, onMounted } from 'vue'
-import api from '../../api'
+import api, { downloadCsv } from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const loading = ref(false)
@@ -56,7 +57,7 @@ async function fetch() {
 
 function reset() { query.keyword = ''; query.category_id = null; query.status = ''; query.warehouse_id = null; fetch() }
 
-function handleExport() { window.open('/api/stock/records?format=csv', '_blank') }
+function handleExport() { downloadCsv('/stock/records?format=csv') }
 
 async function handleAction(row, action) {
   if (action === 'in') {
