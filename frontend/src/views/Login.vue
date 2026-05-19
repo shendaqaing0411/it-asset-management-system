@@ -33,7 +33,6 @@
               <el-button type="primary" native-type="submit" :loading="loading" style="width:100%;height:44px;font-size:15px;border-radius:8px;">登 录</el-button>
             </el-form-item>
           </el-form>
-          <p class="hint">默认账号 admin / admin123</p>
         </div>
       </div>
     </div>
