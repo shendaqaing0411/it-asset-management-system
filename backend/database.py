@@ -198,6 +198,17 @@ def init_db():
             ref_id INTEGER,
             create_time DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS roles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(50) NOT NULL UNIQUE,
+            description VARCHAR(200),
+            is_system INTEGER DEFAULT 0,
+            scope VARCHAR(20) DEFAULT 'all',
+            permissions TEXT DEFAULT '[]',
+            create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+            update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     ''')
     # 迁移：为已有数据库添加新字段（CREATE TABLE IF NOT EXISTS 不会修改已有表）
     migrations = [
@@ -209,6 +220,8 @@ def init_db():
         "ALTER TABLE repairs ADD COLUMN repair_method VARCHAR(20)",
         "ALTER TABLE repairs ADD COLUMN return_date DATE",
         "ALTER TABLE repairs ADD COLUMN return_confirmed INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN dept_id INTEGER",
+        "ALTER TABLE users ADD COLUMN role_id INTEGER REFERENCES roles(id)",
     ]
     for m in migrations:
         try:
@@ -243,13 +256,53 @@ def init_db():
 
 def _seed_data(conn):
     import bcrypt
+    import json
     cursor = conn.cursor()
+
+    # 内置角色种子数据
+    ALL_PERMISSIONS = [
+        "dashboard:view", "asset:read", "asset:create", "asset:update", "asset:delete",
+        "asset:import", "asset:export", "stock:query", "stock:in", "stock:out",
+        "stock:return", "stock:transfer", "stock:check", "stock:warning",
+        "repair:read", "repair:create", "repair:update", "repair:return",
+        "scrap:read", "scrap:create",
+        "approval:submit", "approval:approve", "approval:deliver",
+        "report:summary", "report:stock", "report:inout", "report:depreciation",
+        "system:user", "system:role", "system:dept", "system:category",
+        "system:warehouse", "system:supplier", "system:log", "system:dict",
+        "depreciation:config", "depreciation:calculate",
+        "notification:view"
+    ]
+    READ_ONLY = [p for p in ALL_PERMISSIONS if p.endswith((":read", ":view", ":query", ":export", ":warning", ":summary", ":stock", ":inout", ":depreciation", ":log"))]
+    ASSET_ADMIN_PERMS = [p for p in ALL_PERMISSIONS if not p.startswith("system:") and p != "depreciation:config"]
+    DEPT_MANAGER_PERMS = ["dashboard:view", "asset:read", "stock:query", "repair:read", "scrap:read",
+                          "approval:submit", "approval:approve",
+                          "report:summary", "report:stock", "report:inout", "report:depreciation",
+                          "notification:view"]
+    USER_PERMS = ["dashboard:view", "asset:read", "approval:submit", "notification:view"]
+
+    builtin_roles = [
+        ("超级管理员", "系统全局管理，拥有所有权限", 1, "all", json.dumps(ALL_PERMISSIONS, ensure_ascii=False)),
+        ("资产管理员", "负责资产录入、出入库、维保报废操作", 1, "all", json.dumps(ASSET_ADMIN_PERMS, ensure_ascii=False)),
+        ("部门主管", "审批本部门资产领用、查看本部门数据", 1, "dept", json.dumps(DEPT_MANAGER_PERMS, ensure_ascii=False)),
+        ("普通用户", "申请领用资产、查看个人持有资产", 1, "self", json.dumps(USER_PERMS, ensure_ascii=False)),
+        ("审计员", "只读查看所有数据与操作日志", 1, "all", json.dumps(READ_ONLY, ensure_ascii=False)),
+    ]
+    for name, desc, is_sys, scope, perms in builtin_roles:
+        row = cursor.execute("SELECT id FROM roles WHERE name = ?", (name,)).fetchone()
+        if not row:
+            cursor.execute(
+                "INSERT INTO roles (name, description, is_system, scope, permissions) VALUES (?,?,?,?,?)",
+                (name, desc, is_sys, scope, perms)
+            )
+
     row = cursor.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
     if not row:
         pwd = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
+        super_admin_role = cursor.execute("SELECT id FROM roles WHERE name = '超级管理员'").fetchone()
         cursor.execute(
-            "INSERT INTO users (username, password, real_name, role) VALUES (?, ?, ?, ?)",
-            ("admin", pwd, "管理员", "super_admin")
+            "INSERT INTO users (username, password, real_name, role, role_id) VALUES (?, ?, ?, ?, ?)",
+            ("admin", pwd, "管理员", "super_admin", super_admin_role["id"] if super_admin_role else None)
         )
         # 默认分类
         for name in ["办公设备", "网络设备", "配件耗材", "软件授权"]:
@@ -259,4 +312,18 @@ def _seed_data(conn):
             cursor.execute("INSERT INTO departments (name) VALUES (?)", (name,))
         # 默认仓库
         cursor.execute("INSERT INTO warehouses (name, location) VALUES (?, ?)", ("主仓库", "A栋1层"))
-        conn.commit()
+    else:
+        # 为已有用户回填 role_id（根据 role 字段匹配内置角色名）
+        role_map = {
+            "super_admin": "超级管理员",
+            "asset_admin": "资产管理员",
+            "dept_manager": "部门主管",
+            "user": "普通用户",
+            "auditor": "审计员",
+        }
+        for eng_name, cn_name in role_map.items():
+            cursor.execute(
+                "UPDATE users SET role_id = (SELECT id FROM roles WHERE name = ?) WHERE role = ? AND role_id IS NULL",
+                (cn_name, eng_name)
+            )
+    conn.commit()

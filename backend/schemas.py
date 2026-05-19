@@ -179,14 +179,18 @@ class UserCreate(BaseModel):
     username: str = Field(..., min_length=1, max_length=50)
     password: str = Field(..., min_length=6, max_length=100)
     real_name: Optional[str] = None
-    role: str = "user"
+    role: Optional[str] = None
+    role_id: Optional[int] = None
     status: str = "active"
+    dept_id: Optional[int] = None
 
 
 class UserUpdate(BaseModel):
     real_name: Optional[str] = None
     role: Optional[str] = None
+    role_id: Optional[int] = None
     status: Optional[str] = None
+    dept_id: Optional[int] = None
 
 
 class UserPasswordReset(BaseModel):

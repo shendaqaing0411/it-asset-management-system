@@ -9,7 +9,7 @@ from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from database import get_db
-from auth import get_current_user
+from auth import get_current_user, require_permission, require_dept_scope
 from schemas import AssetCreate, AssetUpdate, Response
 import qrcode
 import openpyxl
@@ -60,7 +60,8 @@ def list_assets(
     status: str = Query(None), dept_id: int = Query(None), warehouse_id: int = Query(None),
     page: int = Query(1), page_size: int = Query(20),
     format: str = Query(None),
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(require_permission("asset:read")),
+    scope: dict = Depends(require_dept_scope())
 ):
     db = get_db()
     conditions = []
@@ -80,6 +81,10 @@ def list_assets(
     if warehouse_id:
         conditions.append("a.warehouse_id = ?")
         params.append(warehouse_id)
+    if scope:
+        for k, v in scope.items():
+            conditions.append(f"a.{k} = ?")
+            params.append(v)
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     # CSV 导出
@@ -142,7 +147,7 @@ def get_asset_names(user: dict = Depends(get_current_user)):
 
 
 @router.get("/warranty-alerts")
-def warranty_alerts(days: int = Query(30), user: dict = Depends(get_current_user)):
+def warranty_alerts(days: int = Query(30), user: dict = Depends(require_permission("asset:read"))):
     """返回保修到期日在 [today, today+days] 范围内的资产列表"""
     db = get_db()
     today = date.today()
@@ -159,12 +164,17 @@ def warranty_alerts(days: int = Query(30), user: dict = Depends(get_current_user
 
 
 @router.get("/{asset_id}")
-def get_asset(asset_id: int, user: dict = Depends(get_current_user)):
+def get_asset(asset_id: int, user: dict = Depends(get_current_user),
+              scope: dict = Depends(require_dept_scope())):
     db = get_db()
     row = db.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
     db.close()
     if not row:
         return Response(code=1, message="资产不存在").model_dump()
+    if scope:
+        for k, v in scope.items():
+            if row.get(k) != v:
+                return Response(code=1, message="资产不存在").model_dump()
     return Response(data=_format_asset(row)).model_dump()
 
 
@@ -204,7 +214,7 @@ def asset_timeline(asset_id: int, user: dict = Depends(get_current_user)):
 
 
 @router.post("")
-def create_asset(req: AssetCreate, user: dict = Depends(get_current_user)):
+def create_asset(req: AssetCreate, user: dict = Depends(require_permission("asset:create"))):
     db = get_db()
     cat = db.execute("SELECT * FROM categories WHERE id = ?", (req.category_id,)).fetchone()
     if not cat:
@@ -233,7 +243,7 @@ def create_asset(req: AssetCreate, user: dict = Depends(get_current_user)):
 
 
 @router.put("/{asset_id}")
-def update_asset(asset_id: int, req: AssetUpdate, user: dict = Depends(get_current_user)):
+def update_asset(asset_id: int, req: AssetUpdate, user: dict = Depends(require_permission("asset:update"))):
     db = get_db()
     existing = db.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
     if not existing:
@@ -252,9 +262,7 @@ def update_asset(asset_id: int, req: AssetUpdate, user: dict = Depends(get_curre
 
 
 @router.delete("/{asset_id}")
-def delete_asset(asset_id: int, user: dict = Depends(get_current_user)):
-    if user["role"] not in ("super_admin", "asset_admin"):
-        return Response(code=1, message="仅管理员可删除资产").model_dump()
+def delete_asset(asset_id: int, user: dict = Depends(require_permission("asset:delete"))):
     db = get_db()
     existing = db.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
     if not existing:
@@ -273,7 +281,7 @@ def delete_asset(asset_id: int, user: dict = Depends(get_current_user)):
 
 
 @router.post("/calculate-depreciation")
-def calculate_depreciation(user: dict = Depends(get_current_user)):
+def calculate_depreciation(user: dict = Depends(require_permission("depreciation:calculate"))):
     """遍历所有 in_stock/in_use 资产，按分类配置计算折旧"""
     db = get_db()
     rows = db.execute(
@@ -351,7 +359,7 @@ def download_import_template():
 
 
 @router.post("/import")
-def import_assets(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+def import_assets(file: UploadFile = File(...), user: dict = Depends(require_permission("asset:import"))):
     db = get_db()
     wb = openpyxl.load_workbook(file.file)
     ws = wb.active
@@ -402,9 +410,17 @@ def import_assets(file: UploadFile = File(...), user: dict = Depends(get_current
 
 
 @router.get("/export/all")
-def export_assets(user: dict = Depends(get_current_user)):
+def export_assets(user: dict = Depends(require_permission("asset:export")),
+                  scope: dict = Depends(require_dept_scope())):
     db = get_db()
-    rows = db.execute("SELECT * FROM assets ORDER BY id DESC").fetchall()
+    conditions = []
+    params = []
+    if scope:
+        for k, v in scope.items():
+            conditions.append(f"a.{k} = ?")
+            params.append(v)
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+    rows = db.execute(f"SELECT * FROM assets a {where} ORDER BY a.id DESC", params).fetchall()
     db.close()
     wb = openpyxl.Workbook()
     ws = wb.active

@@ -1,5 +1,6 @@
 # 认证路由：登录、登出、获取当前用户信息
 
+import json
 from fastapi import APIRouter, Depends
 from database import get_db
 from auth import hash_password, verify_password, create_token, get_current_user, decode_token
@@ -10,18 +11,25 @@ router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 @router.post("/login")
 def login(req: LoginReq):
-    """用户登录：验证用户名密码，返回 JWT 令牌与用户信息"""
+    """用户登录：验证用户名密码，返回 JWT 令牌与用户信息（含权限码）"""
     db = get_db()
     user = db.execute("SELECT * FROM users WHERE username = ?", (req.username,)).fetchone()
-    db.close()
     if not user or not verify_password(req.password, user["password"]):
+        db.close()
         return Response(code=1, message="用户名或密码错误").model_dump()
     if user["status"] != "active":
+        db.close()
         return Response(code=1, message="账号已被禁用").model_dump()
+    permissions = []
+    if user["role_id"]:
+        role = db.execute("SELECT permissions FROM roles WHERE id = ?", (user["role_id"],)).fetchone()
+        if role:
+            permissions = json.loads(role["permissions"] or "[]")
+    db.close()
     token = create_token(user["id"], user["username"], user["role"])
     return Response(data={
         "token": token,
-        "user": {"id": user["id"], "username": user["username"], "real_name": user["real_name"], "role": user["role"]}
+        "user": {"id": user["id"], "username": user["username"], "real_name": user["real_name"], "role": user["role"], "permissions": permissions}
     }, message="登录成功").model_dump()
 
 

@@ -9,7 +9,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from database import get_db
-from auth import get_current_user
+from auth import get_current_user, require_permission, require_dept_scope
 from schemas import ScrapCreate, Response
 
 router = APIRouter(prefix="/api/scraps", tags=["报废管理"])
@@ -24,16 +24,26 @@ def _log(db, user_id: int, desc: str):
 def list_scraps(
     format: str = Query(None),
     page: int = Query(1), page_size: int = Query(20),
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(require_permission("scrap:read")),
+    scope: dict = Depends(require_dept_scope())
 ):
     db = get_db()
-    total = db.execute("SELECT COUNT(*) FROM scraps").fetchone()[0]
+    conditions = []
+    params = []
+    if scope:
+        for k, v in scope.items():
+            conditions.append(f"a.{k} = ?")
+            params.append(v)
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    count_from = "FROM scraps s LEFT JOIN assets a ON s.asset_id = a.id" if scope else "FROM scraps s"
+    total = db.execute(f"SELECT COUNT(*) {count_from} {where}", params).fetchone()[0]
     offset = (page - 1) * page_size
     rows = db.execute(
-        """SELECT s.*, a.asset_no, a.name as asset_name
+        f"""SELECT s.*, a.asset_no, a.name as asset_name
            FROM scraps s LEFT JOIN assets a ON s.asset_id = a.id
+           {where}
            ORDER BY s.id DESC LIMIT ? OFFSET ?""",
-        (page_size, offset)
+        params + [page_size, offset]
     ).fetchall()
 
     if format == "csv":
@@ -41,9 +51,11 @@ def list_scraps(
         writer = csv.writer(output)
         writer.writerow(["资产编号", "资产名称", "报废原因", "年限匹配", "责任人", "报废日期", "备注", "操作人"])
         all_rows = db.execute(
-            """SELECT s.*, a.asset_no, a.name as asset_name
+            f"""SELECT s.*, a.asset_no, a.name as asset_name
                FROM scraps s LEFT JOIN assets a ON s.asset_id = a.id
-               ORDER BY s.id DESC"""
+               {where}
+               ORDER BY s.id DESC""",
+            params
         ).fetchall()
         for r in all_rows:
             writer.writerow([r["asset_no"], r["asset_name"], r["scrap_reason"],
@@ -60,7 +72,7 @@ def list_scraps(
 
 
 @router.post("")
-def create_scrap(req: ScrapCreate, user: dict = Depends(get_current_user)):
+def create_scrap(req: ScrapCreate, user: dict = Depends(require_permission("scrap:create"))):
     """创建报废记录，校验资产存在、scrap_reason 必填、自然老化时 aging_match 必填"""
     if req.scrap_reason not in ("自然老化", "人为损坏"):
         return Response(code=1, message="报废原因只能为：自然老化 / 人为损坏").model_dump()

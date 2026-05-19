@@ -1,5 +1,6 @@
 <template>
   <el-card>
+    <el-tag v-if="filterAssetId" type="warning" closable @close="$router.replace('/repairs/list')" style="margin-bottom:12px">筛选资产ID: {{ filterAssetId }}（点击 × 清除筛选）</el-tag>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <el-button type="primary" @click="showDialog = true">新增维修</el-button>
       <el-button @click="handleExport"><el-icon style="margin-right:4px"><Download /></el-icon>导出</el-button>
@@ -56,9 +57,11 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import api, { downloadCsv } from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+const route = useRoute()
 const loading = ref(false)
 const saving = ref(false)
 const items = ref([])
@@ -67,11 +70,17 @@ const page = ref(1)
 const showDialog = ref(false)
 const editing = ref(false)
 const assetOptions = ref([])
-const form = reactive({ asset_id: null, fault_desc: '', repair_type: '', repair_method: '', repair_cost: 0, repair_date: null })
+const filterAssetId = ref(route.query.asset_id ? Number(route.query.asset_id) : null)
+const form = reactive({ asset_id: filterAssetId.value || null, fault_desc: '', repair_type: '', repair_method: '', repair_cost: 0, repair_date: null })
 
 async function fetch() {
   loading.value = true
-  try { const res = await api.get('/repairs', { params: { page: page.value } }); items.value = res.data.items; total.value = res.data.total }
+  try {
+    const params = { page: page.value }
+    if (filterAssetId.value) params.asset_id = filterAssetId.value
+    const res = await api.get('/repairs', { params })
+    items.value = res.data.items; total.value = res.data.total
+  }
   finally { loading.value = false }
 }
 

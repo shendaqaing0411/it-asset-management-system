@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from database import get_db
-from auth import get_current_user, require_role
+from auth import get_current_user, require_permission
 from schemas import Response
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -50,7 +50,7 @@ def list_fields(module: Optional[str] = Query(None), user: dict = Depends(get_cu
 
 
 @router.post("/fields")
-def create_field(req: DictFieldCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def create_field(req: DictFieldCreate, user: dict = Depends(require_permission("system:dict"))):
     db = get_db()
     existing = db.execute(
         "SELECT id FROM dict_fields WHERE module = ? AND field_key = ?",
@@ -72,7 +72,7 @@ def create_field(req: DictFieldCreate, user: dict = Depends(require_role("super_
 
 
 @router.put("/fields/{field_id}")
-def update_field(field_id: int, req: DictFieldUpdate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def update_field(field_id: int, req: DictFieldUpdate, user: dict = Depends(require_permission("system:dict"))):
     db = get_db()
     existing = db.execute("SELECT * FROM dict_fields WHERE id = ?", (field_id,)).fetchone()
     if not existing:
@@ -88,7 +88,7 @@ def update_field(field_id: int, req: DictFieldUpdate, user: dict = Depends(requi
 
 
 @router.delete("/fields/{field_id}")
-def delete_field(field_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def delete_field(field_id: int, user: dict = Depends(require_permission("system:dict"))):
     db = get_db()
     db.execute("DELETE FROM dict_fields WHERE id = ?", (field_id,))
     db.commit()
@@ -122,7 +122,7 @@ def get_values(module: str = Query(...), record_id: int = Query(...), user: dict
 
 
 @router.post("/values")
-def save_values(req: DictValuesSave, user: dict = Depends(get_current_user)):
+def save_values(req: DictValuesSave, user: dict = Depends(require_permission("asset:create"))):
     """保存字典值（upsert）"""
     db = get_db()
     fields = db.execute(

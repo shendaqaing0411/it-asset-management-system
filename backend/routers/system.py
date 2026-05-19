@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from database import get_db
-from auth import get_current_user, require_role, hash_password
+from auth import get_current_user, require_permission, hash_password
 from schemas import (
     DeptCreate, CategoryCreate, SupplierCreate, WarehouseCreate, WarningCreate,
     UserCreate, UserUpdate, UserPasswordReset, Response
@@ -19,7 +19,7 @@ def list_depts(user: dict = Depends(get_current_user)):
 
 
 @router.post("/departments")
-def create_dept(req: DeptCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def create_dept(req: DeptCreate, user: dict = Depends(require_permission("system:dept"))):
     db = get_db()
     db.execute("INSERT INTO departments (name, parent_id, sort_order) VALUES (?,?,?)",
                (req.name, req.parent_id, req.sort_order))
@@ -30,7 +30,7 @@ def create_dept(req: DeptCreate, user: dict = Depends(require_role("super_admin"
 
 
 @router.put("/departments/{dept_id}")
-def update_dept(dept_id: int, req: DeptCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def update_dept(dept_id: int, req: DeptCreate, user: dict = Depends(require_permission("system:dept"))):
     db = get_db()
     existing = db.execute("SELECT id FROM departments WHERE id = ?", (dept_id,)).fetchone()
     if not existing:
@@ -44,7 +44,7 @@ def update_dept(dept_id: int, req: DeptCreate, user: dict = Depends(require_role
 
 
 @router.delete("/departments/{dept_id}")
-def delete_dept(dept_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def delete_dept(dept_id: int, user: dict = Depends(require_permission("system:dept"))):
     db = get_db()
     existing = db.execute("SELECT id FROM departments WHERE id = ?", (dept_id,)).fetchone()
     if not existing:
@@ -78,7 +78,7 @@ def list_categories(tree: bool = Query(False), user: dict = Depends(get_current_
 
 
 @router.post("/categories")
-def create_category(req: CategoryCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def create_category(req: CategoryCreate, user: dict = Depends(require_permission("system:category"))):
     db = get_db()
     db.execute("INSERT INTO categories (name, parent_id, sort_order) VALUES (?,?,?)",
                (req.name, req.parent_id, req.sort_order))
@@ -89,7 +89,7 @@ def create_category(req: CategoryCreate, user: dict = Depends(require_role("supe
 
 
 @router.put("/categories/{cat_id}")
-def update_category(cat_id: int, req: CategoryCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def update_category(cat_id: int, req: CategoryCreate, user: dict = Depends(require_permission("system:category"))):
     db = get_db()
     existing = db.execute("SELECT id FROM categories WHERE id = ?", (cat_id,)).fetchone()
     if not existing:
@@ -103,7 +103,7 @@ def update_category(cat_id: int, req: CategoryCreate, user: dict = Depends(requi
 
 
 @router.delete("/categories/{cat_id}")
-def delete_category(cat_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def delete_category(cat_id: int, user: dict = Depends(require_permission("system:category"))):
     db = get_db()
     existing = db.execute("SELECT id FROM categories WHERE id = ?", (cat_id,)).fetchone()
     if not existing:
@@ -133,7 +133,7 @@ def list_suppliers(user: dict = Depends(get_current_user)):
 
 
 @router.post("/suppliers")
-def create_supplier(req: SupplierCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def create_supplier(req: SupplierCreate, user: dict = Depends(require_permission("system:supplier"))):
     db = get_db()
     db.execute("INSERT INTO suppliers (name, contact, phone, address, remark) VALUES (?,?,?,?,?)",
                (req.name, req.contact, req.phone, req.address, req.remark))
@@ -144,7 +144,7 @@ def create_supplier(req: SupplierCreate, user: dict = Depends(require_role("supe
 
 
 @router.put("/suppliers/{sup_id}")
-def update_supplier(sup_id: int, req: SupplierCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def update_supplier(sup_id: int, req: SupplierCreate, user: dict = Depends(require_permission("system:supplier"))):
     db = get_db()
     existing = db.execute("SELECT id FROM suppliers WHERE id = ?", (sup_id,)).fetchone()
     if not existing:
@@ -158,7 +158,7 @@ def update_supplier(sup_id: int, req: SupplierCreate, user: dict = Depends(requi
 
 
 @router.delete("/suppliers/{sup_id}")
-def delete_supplier(sup_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def delete_supplier(sup_id: int, user: dict = Depends(require_permission("system:supplier"))):
     db = get_db()
     existing = db.execute("SELECT id FROM suppliers WHERE id = ?", (sup_id,)).fetchone()
     if not existing:
@@ -180,7 +180,7 @@ def list_warehouses(user: dict = Depends(get_current_user)):
 
 
 @router.post("/warehouses")
-def create_warehouse(req: WarehouseCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def create_warehouse(req: WarehouseCreate, user: dict = Depends(require_permission("system:warehouse"))):
     db = get_db()
     db.execute("INSERT INTO warehouses (name, location, manager_id) VALUES (?,?,?)",
                (req.name, req.location, req.manager_id))
@@ -191,7 +191,7 @@ def create_warehouse(req: WarehouseCreate, user: dict = Depends(require_role("su
 
 
 @router.put("/warehouses/{wh_id}")
-def update_warehouse(wh_id: int, req: WarehouseCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def update_warehouse(wh_id: int, req: WarehouseCreate, user: dict = Depends(require_permission("system:warehouse"))):
     db = get_db()
     existing = db.execute("SELECT id FROM warehouses WHERE id = ?", (wh_id,)).fetchone()
     if not existing:
@@ -205,7 +205,7 @@ def update_warehouse(wh_id: int, req: WarehouseCreate, user: dict = Depends(requ
 
 
 @router.delete("/warehouses/{wh_id}")
-def delete_warehouse(wh_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def delete_warehouse(wh_id: int, user: dict = Depends(require_permission("system:warehouse"))):
     db = get_db()
     existing = db.execute("SELECT id FROM warehouses WHERE id = ?", (wh_id,)).fetchone()
     if not existing:
@@ -236,7 +236,7 @@ def list_warnings(user: dict = Depends(get_current_user)):
 
 
 @router.post("/warnings")
-def create_warning(req: WarningCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def create_warning(req: WarningCreate, user: dict = Depends(require_permission("system:warehouse"))):
     db = get_db()
     db.execute(
         "INSERT INTO stock_warnings (warehouse_id, category_id, min_stock, max_stock) VALUES (?,?,?,?)",
@@ -249,7 +249,7 @@ def create_warning(req: WarningCreate, user: dict = Depends(require_role("super_
 
 
 @router.put("/warnings/{warn_id}")
-def update_warning(warn_id: int, req: WarningCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def update_warning(warn_id: int, req: WarningCreate, user: dict = Depends(require_permission("system:warehouse"))):
     db = get_db()
     existing = db.execute("SELECT id FROM stock_warnings WHERE id = ?", (warn_id,)).fetchone()
     if not existing:
@@ -265,7 +265,7 @@ def update_warning(warn_id: int, req: WarningCreate, user: dict = Depends(requir
 
 
 @router.delete("/warnings/{warn_id}")
-def delete_warning(warn_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def delete_warning(warn_id: int, user: dict = Depends(require_permission("system:warehouse"))):
     db = get_db()
     existing = db.execute("SELECT id FROM stock_warnings WHERE id = ?", (warn_id,)).fetchone()
     if not existing:
@@ -285,7 +285,7 @@ def list_logs(
     start_date: str = Query(None),
     end_date: str = Query(None),
     keyword: str = Query(None),
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(require_permission("system:log"))
 ):
     """分页查询操作日志，支持日期范围和关键字筛选"""
     db = get_db()
@@ -315,24 +315,37 @@ def list_logs(
 
 # ---- 用户管理 ----
 @router.get("/users")
-def list_users(user: dict = Depends(get_current_user)):
+def list_users(user: dict = Depends(require_permission("system:user"))):
     db = get_db()
-    rows = db.execute("SELECT id, username, real_name, role, status, create_time FROM users ORDER BY id").fetchall()
+    rows = db.execute(
+        """SELECT u.id, u.username, u.real_name, u.role, u.role_id, u.status, u.dept_id, u.create_time,
+                  r.name as role_name
+           FROM users u LEFT JOIN roles r ON u.role_id = r.id
+           ORDER BY u.id"""
+    ).fetchall()
     db.close()
     return Response(data=[dict(r) for r in rows]).model_dump()
 
 
 @router.post("/users")
-def create_user(req: UserCreate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def create_user(req: UserCreate, user: dict = Depends(require_permission("system:user"))):
     db = get_db()
     existing = db.execute("SELECT id FROM users WHERE username = ?", (req.username,)).fetchone()
     if existing:
         db.close()
         return Response(code=1, message="用户名已存在").model_dump()
+    # 校验 role_id 合法性
+    role_str = req.role or "user"
+    if req.role_id:
+        role_row = db.execute("SELECT name FROM roles WHERE id = ?", (req.role_id,)).fetchone()
+        if not role_row:
+            db.close()
+            return Response(code=1, message="所选角色不存在").model_dump()
+        role_str = role_row["name"]
     pwd = hash_password(req.password)
     db.execute(
-        "INSERT INTO users (username, password, real_name, role, status) VALUES (?,?,?,?,?)",
-        (req.username, pwd, req.real_name or req.username, req.role, req.status)
+        "INSERT INTO users (username, password, real_name, role, role_id, status, dept_id) VALUES (?,?,?,?,?,?,?)",
+        (req.username, pwd, req.real_name or req.username, role_str, req.role_id, req.status, req.dept_id)
     )
     db.commit()
     uid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -344,13 +357,20 @@ def create_user(req: UserCreate, user: dict = Depends(require_role("super_admin"
 
 
 @router.put("/users/{user_id}")
-def update_user(user_id: int, req: UserUpdate, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def update_user(user_id: int, req: UserUpdate, user: dict = Depends(require_permission("system:user"))):
     db = get_db()
     existing = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if not existing:
         db.close()
         return Response(code=1, message="用户不存在").model_dump()
     fields = {k: v for k, v in req.model_dump().items() if v is not None}
+    # 如果更新了 role_id，校验角色存在并同步更新 role 字符串
+    if "role_id" in fields and fields["role_id"]:
+        role_row = db.execute("SELECT name FROM roles WHERE id = ?", (fields["role_id"],)).fetchone()
+        if not role_row:
+            db.close()
+            return Response(code=1, message="所选角色不存在").model_dump()
+        fields["role"] = role_row["name"]
     if fields:
         sets = ", ".join(f"{k} = ?" for k in fields)
         db.execute(f"UPDATE users SET {sets} WHERE id = ?", list(fields.values()) + [user_id])
@@ -363,7 +383,7 @@ def update_user(user_id: int, req: UserUpdate, user: dict = Depends(require_role
 
 
 @router.put("/users/{user_id}/password")
-def reset_user_password(user_id: int, req: UserPasswordReset, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def reset_user_password(user_id: int, req: UserPasswordReset, user: dict = Depends(require_permission("system:user"))):
     db = get_db()
     existing = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if not existing:
@@ -380,7 +400,7 @@ def reset_user_password(user_id: int, req: UserPasswordReset, user: dict = Depen
 
 
 @router.delete("/users/{user_id}")
-def delete_user(user_id: int, user: dict = Depends(require_role("super_admin", "asset_admin"))):
+def delete_user(user_id: int, user: dict = Depends(require_permission("system:user"))):
     if user_id == user["id"]:
         return Response(code=1, message="不能删除自己").model_dump()
     db = get_db()

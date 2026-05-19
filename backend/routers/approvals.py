@@ -8,7 +8,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from database import get_db
-from auth import get_current_user
+from auth import get_current_user, require_permission, _get_user_role
 from schemas import ApprovalCreate, ApprovalApprove, Response
 
 router = APIRouter(prefix="/api/approvals", tags=["领用审批"])
@@ -24,23 +24,23 @@ def list_approvals(
     status: str = Query(None),
     format: str = Query(None),
     page: int = Query(1), page_size: int = Query(20),
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(require_permission("asset:read"))
 ):
-    """按角色过滤：普通用户看自己的，主管看本部门的，管理员看全部"""
+    """按角色数据范围过滤：self 看自己的，dept 看本部门的，all 看全部"""
     db = get_db()
     conditions = []
     params = []
     if status:
         conditions.append("ap.status = ?")
         params.append(status)
-    # 角色过滤
-    if user["role"] in ("user", "dept_manager"):
-        if user["role"] == "user":
-            conditions.append("ap.applicant_id = ?")
-            params.append(user["id"])
-        elif user["role"] == "dept_manager":
-            conditions.append("ap.dept_id = ?")
-            params.append(user.get("dept_id", 0))
+    # 数据范围过滤
+    role = _get_user_role(user)
+    if role["scope"] == "self":
+        conditions.append("ap.applicant_id = ?")
+        params.append(user["id"])
+    elif role["scope"] == "dept":
+        conditions.append("ap.dept_id = ?")
+        params.append(user.get("dept_id", 0))
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     if format == "csv":
@@ -89,10 +89,8 @@ def list_approvals(
 
 
 @router.post("")
-def create_approval(req: ApprovalCreate, user: dict = Depends(get_current_user)):
-    """提交领用申请（仅 user/dept_manager 可调用）"""
-    if user["role"] not in ("user", "dept_manager"):
-        return Response(code=1, message="仅普通用户/部门主管可提交领用申请").model_dump()
+def create_approval(req: ApprovalCreate, user: dict = Depends(require_permission("approval:submit"))):
+    """提交领用申请"""
     db = get_db()
     asset = db.execute("SELECT * FROM assets WHERE id = ?", (req.asset_id,)).fetchone()
     if not asset:
@@ -108,7 +106,9 @@ def create_approval(req: ApprovalCreate, user: dict = Depends(get_current_user))
     aid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     _log(db, user["id"], f"提交领用申请: {asset['asset_no']}")
     # 通知资产管理员
-    admins = db.execute("SELECT id FROM users WHERE role IN ('super_admin','asset_admin')").fetchall()
+    admins = db.execute(
+        "SELECT u.id FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name IN ('超级管理员','资产管理员')"
+    ).fetchall()
     for a in admins:
         db.execute(
             "INSERT INTO notifications (user_id, type, title, content, ref_id) VALUES (?,?,?,?,?)",
@@ -121,8 +121,8 @@ def create_approval(req: ApprovalCreate, user: dict = Depends(get_current_user))
 
 
 @router.put("/{approval_id}/approve")
-def approve(approval_id: int, req: ApprovalApprove, user: dict = Depends(get_current_user)):
-    """审批：dept_manager 只能审批本部门申请，admin/asset_admin 不受限"""
+def approve(approval_id: int, req: ApprovalApprove, user: dict = Depends(require_permission("approval:approve"))):
+    """审批：dept 范围角色只能审批本部门申请，all 范围不受限"""
     db = get_db()
     ap = db.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone()
     if not ap:
@@ -131,12 +131,10 @@ def approve(approval_id: int, req: ApprovalApprove, user: dict = Depends(get_cur
     if ap["status"] != "pending":
         db.close()
         return Response(code=1, message="该申请已处理").model_dump()
-    if user["role"] == "dept_manager" and ap["dept_id"] != user.get("dept_id"):
+    role = _get_user_role(user)
+    if role["scope"] == "dept" and ap["dept_id"] != user.get("dept_id"):
         db.close()
         return Response(code=1, message="只能审批本部门的申请").model_dump()
-    if user["role"] not in ("super_admin", "asset_admin", "dept_manager"):
-        db.close()
-        return Response(code=1, message="无审批权限").model_dump()
     status = "approved" if req.approved else "rejected"
     today = date.today().isoformat()
     db.execute(
@@ -159,10 +157,8 @@ def approve(approval_id: int, req: ApprovalApprove, user: dict = Depends(get_cur
 
 
 @router.put("/{approval_id}/deliver")
-def deliver(approval_id: int, user: dict = Depends(get_current_user)):
-    """确认出库（admin/asset_admin），写 stock_record，更新资产状态"""
-    if user["role"] not in ("super_admin", "asset_admin"):
-        return Response(code=1, message="仅管理员/资产管理员可确认出库").model_dump()
+def deliver(approval_id: int, user: dict = Depends(require_permission("approval:deliver"))):
+    """确认出库，写 stock_record，更新资产状态"""
     db = get_db()
     ap = db.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone()
     if not ap:

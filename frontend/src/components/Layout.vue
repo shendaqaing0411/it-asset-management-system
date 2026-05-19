@@ -6,43 +6,44 @@
         <transition name="fade"><span v-show="!collapsed" class="logo-text">IT资产管理系统</span></transition>
       </div>
       <el-menu :default-active="activeMenu" router :collapse="collapsed" :default-openeds="openeds" background-color="transparent" text-color="var(--sidebar-text)" active-text-color="var(--sidebar-active-text)" class="sidebar-menu">
-        <el-menu-item index="/dashboard"><el-icon><DataBoard /></el-icon><template #title>仪表盘</template></el-menu-item>
-        <el-sub-menu index="assets">
+        <el-menu-item index="/dashboard" v-if="hasPerm('dashboard:view')"><el-icon><DataBoard /></el-icon><template #title>仪表盘</template></el-menu-item>
+        <el-sub-menu index="assets" v-if="hasAny('asset:read','asset:create','stock:check')">
           <template #title><el-icon><Monitor /></el-icon><span>资产管理</span></template>
-          <el-menu-item index="/assets/list">资产列表</el-menu-item>
-          <el-menu-item index="/assets/form">资产登记</el-menu-item>
-          <el-menu-item index="/assets/check">资产盘点</el-menu-item>
+          <el-menu-item index="/assets/list" v-if="hasPerm('asset:read')">资产列表</el-menu-item>
+          <el-menu-item index="/assets/form" v-if="hasPerm('asset:create')">资产登记</el-menu-item>
+          <el-menu-item index="/assets/check" v-if="hasPerm('stock:check')">资产盘点</el-menu-item>
         </el-sub-menu>
-        <el-sub-menu index="stock">
+        <el-sub-menu index="stock" v-if="hasAny('stock:query','stock:in','stock:out','approval:submit','approval:approve')">
           <template #title><el-icon><Box /></el-icon><span>库存管理</span></template>
-          <el-menu-item index="/stock/query">库存查询</el-menu-item>
-          <el-menu-item index="/stock/in">入库管理</el-menu-item>
-          <el-menu-item index="/stock/out">出库管理</el-menu-item>
-          <el-menu-item index="/stock/approvals">领用审批</el-menu-item>
+          <el-menu-item index="/stock/query" v-if="hasPerm('stock:query')">库存查询</el-menu-item>
+          <el-menu-item index="/stock/in" v-if="hasPerm('stock:in')">入库管理</el-menu-item>
+          <el-menu-item index="/stock/out" v-if="hasPerm('stock:out')">出库管理</el-menu-item>
+          <el-menu-item index="/stock/approvals" v-if="hasAny('approval:submit','approval:approve','approval:deliver')">领用审批</el-menu-item>
         </el-sub-menu>
-        <el-sub-menu index="repairs">
+        <el-sub-menu index="repairs" v-if="hasAny('repair:read','scrap:read','repair:create','scrap:create')">
           <template #title><el-icon><Tools /></el-icon><span>维保管理</span></template>
-          <el-menu-item index="/repairs/list">维修记录</el-menu-item>
-          <el-menu-item index="/repairs/scraps">报废管理</el-menu-item>
+          <el-menu-item index="/repairs/list" v-if="hasPerm('repair:read')">维修记录</el-menu-item>
+          <el-menu-item index="/repairs/scraps" v-if="hasPerm('scrap:read')">报废管理</el-menu-item>
         </el-sub-menu>
-        <el-sub-menu index="reports">
+        <el-sub-menu index="reports" v-if="hasAny('report:summary','report:stock','report:inout','report:depreciation')">
           <template #title><el-icon><PieChart /></el-icon><span>报表统计</span></template>
-          <el-menu-item index="/reports/stock">库存统计</el-menu-item>
-          <el-menu-item index="/reports/inout">出入库报表</el-menu-item>
-          <el-menu-item index="/reports/summary">资产汇总</el-menu-item>
-          <el-menu-item index="/reports/depreciation">折旧报表</el-menu-item>
+          <el-menu-item index="/reports/stock" v-if="hasPerm('report:stock')">库存统计</el-menu-item>
+          <el-menu-item index="/reports/inout" v-if="hasPerm('report:inout')">出入库报表</el-menu-item>
+          <el-menu-item index="/reports/summary" v-if="hasPerm('report:summary')">资产汇总</el-menu-item>
+          <el-menu-item index="/reports/depreciation" v-if="hasPerm('report:depreciation')">折旧报表</el-menu-item>
         </el-sub-menu>
-        <el-sub-menu index="system">
+        <el-sub-menu index="system" v-if="hasAny('system:dept','system:category','system:supplier','system:warehouse','system:user','system:role','system:log','system:dict','depreciation:config')">
           <template #title><el-icon><Setting /></el-icon><span>系统管理</span></template>
-          <el-menu-item index="/system/departments">部门管理</el-menu-item>
-          <el-menu-item index="/system/categories">分类管理</el-menu-item>
-          <el-menu-item index="/system/suppliers">供应商管理</el-menu-item>
-          <el-menu-item index="/system/warehouses">仓库管理</el-menu-item>
-          <el-menu-item index="/system/warnings">库存预警</el-menu-item>
-          <el-menu-item index="/system/logs">操作日志</el-menu-item>
-          <el-menu-item index="/system/users">用户管理</el-menu-item>
-          <el-menu-item index="/system/dict">数据字典</el-menu-item>
-          <el-menu-item index="/system/depreciation-config">折旧配置</el-menu-item>
+          <el-menu-item index="/system/departments" v-if="hasPerm('system:dept')">部门管理</el-menu-item>
+          <el-menu-item index="/system/categories" v-if="hasPerm('system:category')">分类管理</el-menu-item>
+          <el-menu-item index="/system/suppliers" v-if="hasPerm('system:supplier')">供应商管理</el-menu-item>
+          <el-menu-item index="/system/warehouses" v-if="hasPerm('system:warehouse')">仓库管理</el-menu-item>
+          <el-menu-item index="/system/warnings" v-if="hasPerm('system:warehouse')">库存预警</el-menu-item>
+          <el-menu-item index="/system/logs" v-if="hasPerm('system:log')">操作日志</el-menu-item>
+          <el-menu-item index="/system/users" v-if="hasPerm('system:user')">用户管理</el-menu-item>
+          <el-menu-item index="/system/roles" v-if="hasPerm('system:role')">角色管理</el-menu-item>
+          <el-menu-item index="/system/dict" v-if="hasPerm('system:dict')">数据字典</el-menu-item>
+          <el-menu-item index="/system/depreciation-config" v-if="hasPerm('depreciation:config')">折旧配置</el-menu-item>
         </el-sub-menu>
       </el-menu>
       <div class="sidebar-collapse" @click="collapsed = !collapsed">
@@ -82,20 +83,23 @@
 </template>
 
 <script setup>
-// 主布局：可折叠侧边栏 + 面包屑导航 + 用户下拉菜单 + 全屏切换
-// 根据路由 name 自动推断面包屑父子标题
+// 主布局：可折叠侧边栏 + 权限过滤菜单 + 面包屑导航 + 用户下拉菜单 + 全屏切换
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NotificationBell from './NotificationBell.vue'
 const route = useRoute()
 const router = useRouter()
 const user = JSON.parse(localStorage.getItem('user') || 'null')
+const permissions = user?.permissions || []
 const collapsed = ref(false)
 const activeMenu = computed(() => route.path)
 const openeds = ['assets', 'stock', 'repairs', 'reports', 'system']
 const pageTitle = computed(() => route.meta.title || '')
-const parentMap = { AssetList: '资产管理', AssetForm: '资产管理', CheckPlan: '资产管理', AssetTimeline: '资产管理', StockQuery: '库存管理', StockIn: '库存管理', StockOut: '库存管理', ApprovalList: '库存管理', RepairList: '维保管理', ScrapList: '维保管理', StockReport: '报表统计', InoutReport: '报表统计', SummaryReport: '报表统计', Depreciation: '报表统计', Departments: '系统管理', Categories: '系统管理', Suppliers: '系统管理', Warehouses: '系统管理', Warnings: '系统管理', Logs: '系统管理', Users: '系统管理', Dict: '系统管理', DepreciationConfig: '系统管理' }
+const parentMap = { AssetList: '资产管理', AssetForm: '资产管理', CheckPlan: '资产管理', AssetTimeline: '资产管理', StockQuery: '库存管理', StockIn: '库存管理', StockOut: '库存管理', ApprovalList: '库存管理', RepairList: '维保管理', ScrapList: '维保管理', StockReport: '报表统计', InoutReport: '报表统计', SummaryReport: '报表统计', Depreciation: '报表统计', Departments: '系统管理', Categories: '系统管理', Suppliers: '系统管理', Warehouses: '系统管理', Warnings: '系统管理', Logs: '系统管理', Users: '系统管理', Roles: '系统管理', Dict: '系统管理', DepreciationConfig: '系统管理' }
 const parentTitle = computed(() => parentMap[route.name] || '')
+
+function hasPerm(code) { return permissions.includes(code) }
+function hasAny(...codes) { return codes.some(c => permissions.includes(c)) }
 
 const roleMap = { super_admin: '超级管理员', asset_admin: '资产管理员', dept_manager: '部门主管', user: '普通用户', auditor: '审计员' }
 function roleLabel(r) { return roleMap[r] || r || '未知' }

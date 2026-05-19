@@ -7,23 +7,35 @@ import string
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from database import get_db
-from auth import get_current_user
+from auth import get_current_user, require_permission, require_dept_scope
 from schemas import Response
 
 router = APIRouter(prefix="/api/report", tags=["报表统计"])
 
 
 @router.get("/summary")
-def summary(user: dict = Depends(get_current_user)):
+def summary(user: dict = Depends(require_permission("report:summary")),
+            scope: dict = Depends(require_dept_scope())):
     """资产汇总：按状态统计数量与总价值"""
     db = get_db()
-    total = db.execute("SELECT COUNT(*) FROM assets").fetchone()[0]
-    in_stock = db.execute("SELECT COUNT(*) FROM assets WHERE status = 'in_stock'").fetchone()[0]
-    in_use = db.execute("SELECT COUNT(*) FROM assets WHERE status = 'in_use'").fetchone()[0]
-    borrowed = db.execute("SELECT COUNT(*) FROM assets WHERE status = 'borrowed'").fetchone()[0]
-    repairing = db.execute("SELECT COUNT(*) FROM assets WHERE status = 'repairing'").fetchone()[0]
-    scrapped = db.execute("SELECT COUNT(*) FROM assets WHERE status = 'scrapped'").fetchone()[0]
-    total_value = db.execute("SELECT COALESCE(SUM(purchase_price), 0) FROM assets").fetchone()[0]
+    asset_where = ""
+    scope_params = []
+    if scope:
+        conditions = []
+        for k, v in scope.items():
+            conditions.append(f"{k} = ?")
+            scope_params.append(v)
+        asset_where = "WHERE " + " AND ".join(conditions)
+    total = db.execute(f"SELECT COUNT(*) FROM assets {asset_where}", scope_params).fetchone()[0]
+    def _count(status):
+        cond = asset_where.replace("WHERE", "WHERE status = ? AND") if asset_where else f"WHERE status = ?"
+        return db.execute(f"SELECT COUNT(*) FROM assets {cond}", scope_params + [status]).fetchone()[0]
+    in_stock = _count("in_stock")
+    in_use = _count("in_use")
+    borrowed = _count("borrowed")
+    repairing = _count("repairing")
+    scrapped = _count("scrapped")
+    total_value = db.execute(f"SELECT COALESCE(SUM(purchase_price), 0) FROM assets {asset_where}", scope_params).fetchone()[0]
     db.close()
     return Response(data={
         "total": total, "in_stock": in_stock, "in_use": in_use,
@@ -33,31 +45,48 @@ def summary(user: dict = Depends(get_current_user)):
 
 
 @router.get("/stock")
-def stock_report(user: dict = Depends(get_current_user)):
+def stock_report(user: dict = Depends(require_permission("report:stock")),
+                 scope: dict = Depends(require_dept_scope())):
     db = get_db()
+    scope_where = ""
+    scope_params = []
+    if scope:
+        conds = [f"a.{k} = ?" for k, v in scope.items()]
+        scope_params = list(scope.values())
+        scope_where = "WHERE " + " AND ".join(conds)
     # 按二级类目统计（含一级类目分组信息）
     by_category = db.execute(
-        """SELECT c.id, c.name, c.parent_id, COUNT(*) as count, COALESCE(SUM(a.purchase_price), 0) as value
+        f"""SELECT c.id, c.name, c.parent_id, COUNT(*) as count, COALESCE(SUM(a.purchase_price), 0) as value
            FROM assets a LEFT JOIN categories c ON a.category_id = c.id
-           GROUP BY a.category_id ORDER BY count DESC"""
+           {scope_where}
+           GROUP BY a.category_id ORDER BY count DESC""",
+        scope_params
     ).fetchall()
     # 按一级类目汇总（含子分类明细）
+    by_parent_scope = ""
+    by_parent_params = []
+    if scope:
+        by_parent_scope = "AND " + " AND ".join(f"a.{k} = ?" for k in scope)
+        by_parent_params = list(scope.values())
     by_parent = db.execute(
-        """SELECT p.id as parent_id, p.name as parent_name,
+        f"""SELECT p.id as parent_id, p.name as parent_name,
                   c.id as child_id, c.name as child_name,
                   COUNT(a.id) as count, COALESCE(SUM(a.purchase_price), 0) as value
            FROM categories c
            LEFT JOIN categories p ON c.parent_id = p.id
            LEFT JOIN assets a ON a.category_id = c.id
-           WHERE c.parent_id > 0
+           WHERE c.parent_id > 0 {by_parent_scope}
            GROUP BY c.id
-           ORDER BY p.sort_order, c.sort_order"""
+           ORDER BY p.sort_order, c.sort_order""",
+        by_parent_params
     ).fetchall()
     by_status = db.execute(
-        "SELECT status, COUNT(*) as count FROM assets GROUP BY status"
+        f"SELECT status, COUNT(*) as count FROM assets {scope_where} GROUP BY status",
+        scope_params
     ).fetchall()
     by_dept = db.execute(
-        "SELECT d.name, COUNT(*) as count FROM assets a LEFT JOIN departments d ON a.dept_id = d.id GROUP BY a.dept_id"
+        f"SELECT d.name, COUNT(*) as count FROM assets a LEFT JOIN departments d ON a.dept_id = d.id {scope_where} GROUP BY a.dept_id",
+        scope_params
     ).fetchall()
     db.close()
     # 构建二级类目树形统计
@@ -90,20 +119,26 @@ def stock_report(user: dict = Depends(get_current_user)):
 @router.get("/inout")
 def inout_report(
     start_date: str = Query(None), end_date: str = Query(None),
-    type: str = Query(None), user: dict = Depends(get_current_user)
+    type: str = Query(None),
+    user: dict = Depends(require_permission("report:inout")),
+    scope: dict = Depends(require_dept_scope())
 ):
     db = get_db()
     conditions = []
     params = []
     if start_date:
-        conditions.append("operate_date >= ?")
+        conditions.append("s.operate_date >= ?")
         params.append(start_date)
     if end_date:
-        conditions.append("operate_date <= ?")
+        conditions.append("s.operate_date <= ?")
         params.append(end_date)
     if type:
-        conditions.append("type = ?")
+        conditions.append("s.type = ?")
         params.append(type)
+    if scope:
+        for k, v in scope.items():
+            conditions.append(f"a.{k} = ?")
+            params.append(v)
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
     rows = db.execute(
         f"""SELECT s.*, a.asset_no, a.name as asset_name
@@ -111,8 +146,9 @@ def inout_report(
            {where} ORDER BY s.id DESC LIMIT 500""",
         params
     ).fetchall()
+    count_from = "FROM stock_records s LEFT JOIN assets a ON s.asset_id = a.id" if scope else "FROM stock_records s"
     summary = db.execute(
-        f"""SELECT type, COUNT(*) as count FROM stock_records s {where} GROUP BY type""",
+        f"""SELECT s.type, COUNT(*) as count {count_from} {where} GROUP BY s.type""",
         params
     ).fetchall()
     db.close()
@@ -123,15 +159,25 @@ def inout_report(
 
 
 @router.get("/depreciation")
-def depreciation_report(format: str = Query(None), user: dict = Depends(get_current_user)):
+def depreciation_report(format: str = Query(None),
+                         user: dict = Depends(require_permission("report:depreciation")),
+                         scope: dict = Depends(require_dept_scope())):
     """折旧报表：列出所有资产折旧状态及汇总，按分类分组"""
     db = get_db()
+    scope_where = ""
+    scope_params = []
+    if scope:
+        conds = [f"a.{k} = ?" for k, v in scope.items()]
+        scope_params = list(scope.values())
+        scope_where = "WHERE " + " AND ".join(conds)
     rows = db.execute(
-        """SELECT a.*, c.name as category_name,
+        f"""SELECT a.*, c.name as category_name,
                   (SELECT name FROM categories WHERE id = c.parent_id) as parent_name
            FROM assets a
            LEFT JOIN categories c ON a.category_id = c.id
-           ORDER BY c.parent_id, a.category_id, a.id DESC"""
+           {scope_where}
+           ORDER BY c.parent_id, a.category_id, a.id DESC""",
+        scope_params
     ).fetchall()
     items = []
     category_summary = {}  # 按二级分类汇总

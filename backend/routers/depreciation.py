@@ -1,7 +1,7 @@
 # 折旧配置管理：按分类自定义折旧方法和年限
 from fastapi import APIRouter, Depends
 from database import get_db
-from auth import get_current_user
+from auth import get_current_user, require_permission
 from schemas import Response
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
@@ -31,7 +31,7 @@ def list_configs(user: dict = Depends(get_current_user)):
 
 
 @router.post("")
-def save_config(body: DepreciationConfigReq, user: dict = Depends(get_current_user)):
+def save_config(body: DepreciationConfigReq, user: dict = Depends(require_permission("depreciation:config"))):
     db = get_db()
     # 校验分类存在
     cat = db.execute("SELECT id FROM categories WHERE id = ?", (body.category_id,)).fetchone()
@@ -60,7 +60,7 @@ def save_config(body: DepreciationConfigReq, user: dict = Depends(get_current_us
 
 
 @router.delete("/{config_id}")
-def delete_config(config_id: int, user: dict = Depends(get_current_user)):
+def delete_config(config_id: int, user: dict = Depends(require_permission("depreciation:config"))):
     db = get_db()
     cur = db.execute("DELETE FROM depreciation_configs WHERE id = ?", (config_id,))
     if cur.rowcount == 0:

@@ -9,7 +9,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from database import get_db
-from auth import get_current_user
+from auth import get_current_user, require_permission, require_dept_scope
 from schemas import StockInReq, StockOutReq, StockTransferReq, CheckReq, Response
 
 router = APIRouter(prefix="/api/stock", tags=["库存管理"])
@@ -30,7 +30,8 @@ def query_stock(
     parent_category_id: int = Query(None),
     status: str = Query(None), warehouse_id: int = Query(None),
     page: int = Query(1), page_size: int = Query(20),
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(require_permission("stock:query")),
+    scope: dict = Depends(require_dept_scope())
 ):
     db = get_db()
     conditions = []
@@ -50,6 +51,10 @@ def query_stock(
     if warehouse_id:
         conditions.append("a.warehouse_id = ?")
         params.append(warehouse_id)
+    if scope:
+        for k, v in scope.items():
+            conditions.append(f"a.{k} = ?")
+            params.append(v)
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
     count_from = "FROM assets a LEFT JOIN categories c ON a.category_id = c.id" if parent_category_id else "FROM assets a"
     total = db.execute(f"SELECT COUNT(*) {count_from} {where}", params).fetchone()[0]
@@ -68,7 +73,7 @@ def query_stock(
 
 
 @router.post("/in")
-def stock_in(req: StockInReq, user: dict = Depends(get_current_user)):
+def stock_in(req: StockInReq, user: dict = Depends(require_permission("stock:in"))):
     db = get_db()
     asset = _asset_row(db, req.asset_id)
     if not asset:
@@ -91,7 +96,7 @@ def stock_in(req: StockInReq, user: dict = Depends(get_current_user)):
 
 
 @router.post("/out")
-def stock_out(req: StockOutReq, user: dict = Depends(get_current_user)):
+def stock_out(req: StockOutReq, user: dict = Depends(require_permission("stock:out"))):
     db = get_db()
     asset = _asset_row(db, req.asset_id)
     if not asset:
@@ -114,7 +119,7 @@ def stock_out(req: StockOutReq, user: dict = Depends(get_current_user)):
 
 
 @router.post("/return/{asset_id}")
-def return_asset(asset_id: int, user: dict = Depends(get_current_user)):
+def return_asset(asset_id: int, user: dict = Depends(require_permission("stock:return"))):
     db = get_db()
     asset = _asset_row(db, asset_id)
     if not asset:
@@ -138,7 +143,7 @@ def return_asset(asset_id: int, user: dict = Depends(get_current_user)):
 
 
 @router.post("/transfer")
-def transfer(req: StockTransferReq, user: dict = Depends(get_current_user)):
+def transfer(req: StockTransferReq, user: dict = Depends(require_permission("stock:transfer"))):
     db = get_db()
     asset = _asset_row(db, req.asset_id)
     if not asset:
@@ -175,7 +180,8 @@ def stock_records(
     asset_id: int = Query(None), type: str = Query(None),
     format: str = Query(None),
     page: int = Query(1), page_size: int = Query(20),
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(require_permission("stock:query")),
+    scope: dict = Depends(require_dept_scope())
 ):
     db = get_db()
     conditions = []
@@ -186,6 +192,10 @@ def stock_records(
     if type:
         conditions.append("s.type = ?")
         params.append(type)
+    if scope:
+        for k, v in scope.items():
+            conditions.append(f"a.{k} = ?")
+            params.append(v)
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     if format == "csv":
@@ -207,7 +217,8 @@ def stock_records(
         return StreamingResponse(iter([output.getvalue()]), media_type="text/csv; charset=utf-8",
                                  headers={"Content-Disposition": f"attachment; filename=stock_records_{suffix}.csv"})
 
-    total = db.execute(f"SELECT COUNT(*) FROM stock_records s {where}", params).fetchone()[0]
+    count_from = "FROM stock_records s LEFT JOIN assets a ON s.asset_id = a.id" if scope else "FROM stock_records s"
+    total = db.execute(f"SELECT COUNT(*) {count_from} {where}", params).fetchone()[0]
     offset = (page - 1) * page_size
     rows = db.execute(
         f"""SELECT s.*, a.asset_no, a.name as asset_name
@@ -220,7 +231,7 @@ def stock_records(
 
 
 @router.get("/warnings")
-def get_warnings(user: dict = Depends(get_current_user)):
+def get_warnings(user: dict = Depends(require_permission("stock:warning"))):
     """获取库存预警：对比当前库存与预警阈值，返回低库存/高库存告警"""
     db = get_db()
     rows = db.execute(
@@ -244,7 +255,7 @@ def get_warnings(user: dict = Depends(get_current_user)):
 
 
 @router.post("/check")
-def stock_check(req: CheckReq, user: dict = Depends(get_current_user)):
+def stock_check(req: CheckReq, user: dict = Depends(require_permission("stock:check"))):
     """盘点确认：接收盘点结果数组，盘盈→入库记录，盘亏→出库记录"""
     db = get_db()
     today = date.today().isoformat()

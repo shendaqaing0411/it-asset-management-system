@@ -10,7 +10,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from database import get_db
-from auth import get_current_user
+from auth import get_current_user, require_permission, require_dept_scope
 from schemas import RepairCreate, RepairUpdate, RepairReturnReq, Response
 
 router = APIRouter(prefix="/api", tags=["维保报废"])
@@ -24,22 +24,44 @@ def _log(db, user_id: int, desc: str):
 
 
 @router.get("/repairs")
-def list_repairs(format: str = Query(None), page: int = Query(1), page_size: int = Query(20), user: dict = Depends(get_current_user)):
+def list_repairs(format: str = Query(None), page: int = Query(1), page_size: int = Query(20),
+                  asset_id: int = Query(None),
+                  user: dict = Depends(require_permission("repair:read")),
+                  scope: dict = Depends(require_dept_scope())):
     db = get_db()
-    total = db.execute("SELECT COUNT(*) FROM repairs").fetchone()[0]
+    where = ""
+    p = []
+    if asset_id:
+        where = "WHERE r.asset_id = ?"
+        p.append(asset_id)
+    if scope:
+        conditions = []
+        for k, v in scope.items():
+            conditions.append(f"a.{k} = ?")
+            p.append(v)
+        scope_where = " AND ".join(conditions)
+        if where:
+            where += " AND " + scope_where
+        else:
+            where = "WHERE " + scope_where
+    count_from = "FROM repairs r LEFT JOIN assets a ON r.asset_id = a.id" if scope else "FROM repairs r"
+    total = db.execute(f"SELECT COUNT(*) {count_from} {where}", p).fetchone()[0]
     offset = (page - 1) * page_size
     rows = db.execute(
-        """SELECT r.*, a.asset_no, a.name as asset_name
+        f"""SELECT r.*, a.asset_no, a.name as asset_name
            FROM repairs r LEFT JOIN assets a ON r.asset_id = a.id
+           {where}
            ORDER BY r.id DESC LIMIT ? OFFSET ?""",
-        (page_size, offset)
+        p + [page_size, offset]
     ).fetchall()
 
     if format == "csv":
         all_rows = db.execute(
-            """SELECT r.*, a.asset_no, a.name as asset_name
+            f"""SELECT r.*, a.asset_no, a.name as asset_name
                FROM repairs r LEFT JOIN assets a ON r.asset_id = a.id
-               ORDER BY r.id DESC"""
+               {where}
+               ORDER BY r.id DESC""",
+            p
         ).fetchall()
         output = io.StringIO()
         writer = csv.writer(output)
@@ -61,7 +83,7 @@ def list_repairs(format: str = Query(None), page: int = Query(1), page_size: int
 
 
 @router.post("/repairs")
-def create_repair(req: RepairCreate, user: dict = Depends(get_current_user)):
+def create_repair(req: RepairCreate, user: dict = Depends(require_permission("repair:create"))):
     """创建维修记录，同时将资产状态更新为"维修中" """
     if req.repair_type and req.repair_type not in VALID_REPAIR_TYPES:
         return Response(code=1, message=f"维修类型只能为：{'/'.join(VALID_REPAIR_TYPES)}").model_dump()
@@ -84,7 +106,7 @@ def create_repair(req: RepairCreate, user: dict = Depends(get_current_user)):
 
 
 @router.put("/repairs/{repair_id}")
-def update_repair(repair_id: int, req: RepairUpdate, user: dict = Depends(get_current_user)):
+def update_repair(repair_id: int, req: RepairUpdate, user: dict = Depends(require_permission("repair:update"))):
     """更新维修记录。status='finished' 仅标记维修完成，不再自动改资产状态"""
     if req.repair_type and req.repair_type not in VALID_REPAIR_TYPES:
         return Response(code=1, message=f"维修类型只能为：{'/'.join(VALID_REPAIR_TYPES)}").model_dump()
@@ -102,7 +124,9 @@ def update_repair(repair_id: int, req: RepairUpdate, user: dict = Depends(get_cu
     _log(db, user["id"], f"更新维修记录 #{repair_id}")
     # 维修完成时生成通知给资产管理员
     if req.status == "finished":
-        admins = db.execute("SELECT id FROM users WHERE role IN ('super_admin','asset_admin')").fetchall()
+        admins = db.execute(
+            "SELECT u.id FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name IN ('超级管理员','资产管理员')"
+        ).fetchall()
         asset = db.execute("SELECT asset_no, name FROM assets WHERE id = ?", (existing["asset_id"],)).fetchone()
         for a in admins:
             db.execute(
@@ -116,7 +140,7 @@ def update_repair(repair_id: int, req: RepairUpdate, user: dict = Depends(get_cu
 
 
 @router.post("/repairs/{repair_id}/return")
-def repair_return(repair_id: int, req: RepairReturnReq, user: dict = Depends(get_current_user)):
+def repair_return(repair_id: int, req: RepairReturnReq, user: dict = Depends(require_permission("repair:return"))):
     """返修入库确认：更新 repairs.return_confirmed=1，assets.status='in_stock'"""
     db = get_db()
     existing = db.execute("SELECT * FROM repairs WHERE id = ?", (repair_id,)).fetchone()

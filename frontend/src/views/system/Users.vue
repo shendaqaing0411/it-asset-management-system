@@ -5,8 +5,8 @@
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="username" label="用户名" width="120" />
       <el-table-column prop="real_name" label="姓名" width="100" />
-      <el-table-column prop="role" label="角色" width="80">
-        <template #default="{row}"><el-tag :type="row.role==='admin'?'danger':''" size="small">{{ row.role === 'admin' ? '管理员' : '普通用户' }}</el-tag></template>
+      <el-table-column prop="role_name" label="角色" width="110">
+        <template #default="{row}">{{ row.role_name || roleLabel(row.role) }}</template>
       </el-table-column>
       <el-table-column prop="status" label="状态" width="80">
         <template #default="{row}"><el-tag :type="row.status==='active'?'success':'info'" size="small">{{ row.status === 'active' ? '启用' : '禁用' }}</el-tag></template>
@@ -17,7 +17,7 @@
           <el-button link type="primary" @click="edit(row)">编辑</el-button>
           <el-button link type="warning" @click="resetPwd(row)">重置密码</el-button>
           <el-popconfirm title="确认删除？" @confirm="handleDelete(row.id)">
-            <template #reference><el-button link type="danger" :disabled="row.role === 'admin'">删除</el-button></template>
+            <template #reference><el-button link type="danger" :disabled="row.role_name === '超级管理员' || row.role === 'super_admin'">删除</el-button></template>
           </el-popconfirm>
         </template>
       </el-table-column>
@@ -35,10 +35,14 @@
         <el-form-item label="姓名">
           <el-input v-model="form.real_name" placeholder="显示名称" />
         </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="form.role" style="width:100%">
-            <el-option label="普通用户" value="user" />
-            <el-option label="管理员" value="admin" />
+        <el-form-item label="角色" prop="role_id">
+          <el-select v-model="form.role_id" style="width:100%" placeholder="选择角色">
+            <el-option v-for="r in roleList" :key="r.id" :label="r.name" :value="r.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="所属部门">
+          <el-select v-model="form.dept_id" style="width:100%" clearable placeholder="选择部门">
+            <el-option v-for="d in depts" :key="d.id" :label="d.name" :value="d.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态" v-if="editing">
@@ -71,21 +75,28 @@
 </template>
 
 <script setup>
-// 用户管理：新增/编辑/删除/重置密码，管理员专属（后端校验角色）
+// 用户管理：角色从 API 动态加载，使用 role_id 关联
 import { ref, reactive, onMounted } from 'vue'
 import api from '../../api'
 import { ElMessage } from 'element-plus'
 
+function roleLabel(role) {
+  const map = { super_admin: '超级管理员', asset_admin: '资产管理员', dept_manager: '部门主管', user: '普通用户', auditor: '审计员' }
+  return map[role] || role || ''
+}
+
 const loading = ref(false)
 const saving = ref(false)
 const items = ref([])
+const roleList = ref([])
 const visible = ref(false)
 const editing = ref(false)
 const pwdVisible = ref(false)
 const pwdTarget = ref(null)
 const formRef = ref(null)
 const pwdFormRef = ref(null)
-const form = reactive({ username: '', password: '', real_name: '', role: 'user', status: 'active' })
+const depts = ref([])
+const form = reactive({ username: '', password: '', real_name: '', role_id: null, status: 'active', dept_id: null })
 const pwdForm = reactive({ password: '' })
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -101,15 +112,26 @@ async function fetch() {
   finally { loading.value = false }
 }
 
+async function fetchDepts() {
+  try { const r = await api.get('/departments'); depts.value = r.data }
+  catch { /* ignore */ }
+}
+
+async function fetchRoles() {
+  try { const r = await api.get('/roles'); roleList.value = r.data }
+  catch { /* ignore */ }
+}
+
 function add() {
   editing.value = false
-  form.username = ''; form.password = ''; form.real_name = ''; form.role = 'user'; form.status = 'active'
+  form.username = ''; form.password = ''; form.real_name = ''; form.role_id = null; form.status = 'active'; form.dept_id = null
   visible.value = true
 }
 
 function edit(row) {
   editing.value = row
-  form.username = row.username; form.password = ''; form.real_name = row.real_name; form.role = row.role; form.status = row.status
+  form.username = row.username; form.password = ''; form.real_name = row.real_name
+  form.role_id = row.role_id || null; form.status = row.status; form.dept_id = row.dept_id || null
   visible.value = true
 }
 
@@ -120,10 +142,11 @@ async function submit() {
   if (!valid) return
   saving.value = true
   try {
+    const payload = { real_name: form.real_name, role_id: form.role_id, status: form.status, dept_id: form.dept_id }
     if (editing.value) {
-      await api.put(`/users/${editing.value.id}`, { real_name: form.real_name, role: form.role, status: form.status })
+      await api.put(`/users/${editing.value.id}`, payload)
     } else {
-      await api.post('/users', { username: form.username, password: form.password, real_name: form.real_name, role: form.role })
+      await api.post('/users', { ...payload, username: form.username, password: form.password })
     }
     ElMessage.success('保存成功'); visible.value = false; fetch()
   } finally { saving.value = false }
@@ -150,5 +173,5 @@ async function handleDelete(id) {
   ElMessage.success('已删除'); fetch()
 }
 
-onMounted(() => fetch())
+onMounted(() => { fetch(); fetchDepts(); fetchRoles() })
 </script>

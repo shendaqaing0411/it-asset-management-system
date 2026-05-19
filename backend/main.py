@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from database import init_db
-from routers import auth, assets, stock, repairs, reports, system, dict, scraps, approvals, notifications, depreciation
+from routers import auth, assets, stock, repairs, reports, system, dict, scraps, approvals, notifications, depreciation, roles
 
 
 @asynccontextmanager
@@ -42,6 +42,7 @@ app.include_router(scraps.router)
 app.include_router(approvals.router)
 app.include_router(notifications.router)
 app.include_router(depreciation.router)
+app.include_router(roles.router)
 
 # 生产模式：挂载前端构建产物为静态文件
 frontend_dist = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend", "dist")

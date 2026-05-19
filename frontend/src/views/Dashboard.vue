@@ -120,14 +120,12 @@ onMounted(async () => {
     pieChart = echarts.init(pieChartRef.value)
     pieChart.setOption(categoryChartOption)
   }
-  
-  // 加载数据
-  try {
-    const [s, l, stock] = await Promise.all([
-      api.get('/report/summary'),
-      api.get('/logs', { params: { page_size: 8 } }),
-      api.get('/report/stock')
-    ])
+
+  // 加载数据 — 每个接口独立调用，有权限就显示，无权限就静默跳过
+  const load = (fn) => fn().catch(() => null)
+
+  await load(async () => {
+    const s = await api.get('/report/summary')
     const d = s.data
     statCards.value[0].value = d.total
     statCards.value[1].value = d.in_stock
@@ -135,9 +133,6 @@ onMounted(async () => {
     statCards.value[3].value = d.repairing || 0
     statCards.value[4].value = d.borrowed || 0
     statCards.value[5].value = d.scrapped || 0
-    recentLogs.value = l.data.items
-    
-    // 更新图表数据
     if (barChart) {
       barChart.setOption({
         series: [{
@@ -151,7 +146,10 @@ onMounted(async () => {
         }]
       })
     }
-    
+  })
+
+  await load(async () => {
+    const stock = await api.get('/report/stock')
     const items = stock.data.by_category || []
     if (pieChart) {
       pieChart.setOption({
@@ -162,22 +160,27 @@ onMounted(async () => {
         }]
       })
     }
-    
-    try {
-      const w = await api.get('/stock/warnings')
-      warnings.value = w.data.filter(x => x.warning)
-    } catch {}
-    try {
-      const wa = await api.get('/assets/warranty-alerts', { params: { days: 30 } })
-      statCards.value[6].value = wa.data?.length || wa.data?.total || 0
-    } catch {}
-    try {
-      const ac = await api.get('/approvals', { params: { status: 'pending' } })
-      statCards.value[7].value = ac.data?.total || ac.data?.length || 0
-    } catch {}
-  } catch (e) {
-    ElMessage.error('仪表盘数据加载失败')
-  }
+  })
+
+  await load(async () => {
+    const l = await api.get('/logs', { params: { page_size: 8 } })
+    recentLogs.value = l.data.items
+  })
+
+  await load(async () => {
+    const w = await api.get('/stock/warnings')
+    warnings.value = w.data.filter(x => x.warning)
+  })
+
+  await load(async () => {
+    const wa = await api.get('/assets/warranty-alerts', { params: { days: 30 } })
+    statCards.value[6].value = wa.data?.length || wa.data?.total || 0
+  })
+
+  await load(async () => {
+    const ac = await api.get('/approvals', { params: { status: 'pending' } })
+    statCards.value[7].value = ac.data?.total || ac.data?.length || 0
+  })
 })
 </script>
 

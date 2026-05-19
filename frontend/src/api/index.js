@@ -40,7 +40,12 @@ api.interceptors.response.use(
       })
       return Promise.reject(err)
     }
-    // 网络错误或服务器错误：仅对非 401、非取消类错误弹窗提示
+    // 403 权限不足：明确提示
+    if (err.response?.status === 403) {
+      ElMessage.error('权限不足，无法执行该操作')
+      return Promise.reject(err)
+    }
+    // 网络错误或服务器错误：弹窗提示
     ElMessage.error(err.response?.data?.detail || err.message || '网络错误')
     return Promise.reject(err)
   }

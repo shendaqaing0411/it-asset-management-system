@@ -23,8 +23,8 @@
 ### 系统支撑
 - **通知中心** — 铃铛组件实时推送，覆盖审批/维修/保修/库存 4 种通知类型
 - **数据字典** — 自定义字段管理（文本/数字/下拉/日期），资产表单动态渲染
-- **角色权限** — 5 角色 RBAC（超级管理员/资产管理员/部门主管/普通用户/审计员）
-- **系统管理** — 部门/分类（一二级）/仓库/供应商/用户管理、**折旧配置（按分类自定义折旧算法+残值率）**、操作日志（日期范围+关键字筛选）
+- **角色权限** — 自定义 RBAC（用户 → 角色 → 权限码），38 个细粒度权限码覆盖 10 大模块，支持 all/dept/self 三级数据范围，内置 5 个预设角色
+- **系统管理** — 部门/分类（一二级）/仓库/供应商/用户管理、**角色管理（可视化权限勾选配置）**、**折旧配置（按分类自定义折旧算法+残值率）**、操作日志（日期范围+关键字筛选）
 
 ## 下载
 
@@ -69,15 +69,42 @@ cd ../backend && pip install -r requirements.txt && python3 main.py
 - **生产模式** — 在终端按 `Ctrl+C` 停止后端服务
 - 数据保存在 `backend/data/it_assets.db`，关闭不会丢失
 
-## 角色权限
+## 角色权限（RBAC 3.0）
 
-| 角色 | 权限 |
+系统采用「用户 → 角色 → 权限码」三层 RBAC 模型，支持超级管理员自由创建/编辑角色并勾选权限，实现灵活的人员权限分配。
+
+### 权限码体系（38 个，10 模块）
+
+| 模块 | 权限码 |
+|------|--------|
+| 仪表盘 | `dashboard:view` |
+| 资产管理 | `asset:read` `asset:create` `asset:update` `asset:delete` `asset:import` `asset:export` |
+| 库存管理 | `stock:query` `stock:in` `stock:out` `stock:return` `stock:transfer` `stock:check` `stock:warning` |
+| 维保管理 | `repair:read` `repair:create` `repair:update` `repair:return` |
+| 报废管理 | `scrap:read` `scrap:create` |
+| 审批流 | `approval:submit` `approval:approve` `approval:deliver` |
+| 报表统计 | `report:summary` `report:stock` `report:inout` `report:depreciation` |
+| 系统管理 | `system:user` `system:role` `system:dept` `system:category` `system:warehouse` `system:supplier` `system:log` `system:dict` |
+| 折旧 | `depreciation:config` `depreciation:calculate` |
+| 通知 | `notification:view` |
+
+### 数据范围（scope）
+
+| 范围 | 说明 |
 |------|------|
-| 超级管理员 `super_admin` | 全部功能，可管理系统配置和用户 |
-| 资产管理员 `asset_admin` | 资产管理、出入库、审批、报表 |
-| 部门主管 `dept_manager` | 本部门资产查看、提交/审批领用申请 |
-| 普通用户 `user` | 资产查看、提交领用申请 |
-| 审计员 `auditor` | 只读查看所有模块 |
+| `all` | 全量数据，无限制 |
+| `dept` | 仅本部门数据 |
+| `self` | 仅本人数据 |
+
+### 内置角色
+
+| 角色 | scope | 关键权限 |
+|------|-------|---------|
+| 超级管理员 | all | 全部 38 个权限 |
+| 资产管理员 | all | 业务操作完整权限，不含系统管理 |
+| 部门主管 | dept | 查看 + 审批本部门数据 |
+| 普通用户 | self | 查看资产 + 提交审批 |
+| 审计员 | all | 全部只读权限（无增删改） |
 
 ## 项目结构
 
@@ -85,19 +112,20 @@ cd ../backend && pip install -r requirements.txt && python3 main.py
 ├── backend/
 │   ├── main.py              # FastAPI 入口
 │   ├── database.py           # 数据库初始化与连接
-│   ├── auth.py               # JWT 认证 + require_role 权限依赖
+│   ├── auth.py               # JWT 认证 + require_permission 权限依赖 + scope 数据隔离
 │   ├── schemas.py            # Pydantic 数据模型
 │   ├── requirements.txt
-│   └── routers/              # API 路由（10 个模块）
+│   └── routers/              # API 路由（11 个模块）
 │       ├── auth.py           # 登录/登出
 │       ├── assets.py         # 资产 CRUD + 导入导出 + 时间线 + 折旧计算 + 保修预警
 │       ├── stock.py          # 出入库/库存/预警 + 盘点确认
 │       ├── repairs.py        # 维修记录 + 返修入库
 │       ├── scraps.py         # 报废管理（独立模块）
-│       ├── approvals.py      # 领用审批流（申请→审批→出库）
+│       ├── approvals.py      # 领用审批流（申请→审批→出库）+ scope 数据隔离
+│       ├── roles.py          # 角色 CRUD + 权限码列表
 │       ├── notifications.py  # 通知中心
 │       ├── reports.py        # 报表统计（含折旧报表）
-│       ├── system.py         # 系统管理
+│       ├── system.py         # 部门/分类/仓库/供应商/用户/日志管理
 │       └── depreciation.py   # 折旧配置管理
 └── frontend/
     ├── package.json
@@ -106,7 +134,7 @@ cd ../backend && pip install -r requirements.txt && python3 main.py
         ├── api/index.js      # Axios 封装
         ├── router/index.js   # 路由配置
         ├── components/       # 公共组件（含 NotificationBell）
-        └── views/            # 页面组件（24 个页面）
+        └── views/            # 页面组件（25 个页面，含角色管理）
 ```
 
 ## 文档
@@ -126,7 +154,9 @@ cd ../backend && pip install -r requirements.txt && python3 main.py
 
 - JWT 密钥通过环境变量 `IT_ASSET_SECRET` 配置
 - 密码 bcrypt 哈希存储，参数化查询防 SQL 注入
-- 操作权限后端二次校验（`require_role` 依赖注入）
+- 操作权限后端逐端点校验（`require_permission` 依赖注入，44 项自动化测试覆盖）
+- 角色权限码白名单校验，内置角色不可修改/删除
+- JWT 不缓存权限，权限变更即时生效
 
 ## License
 
